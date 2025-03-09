@@ -15,7 +15,7 @@ int main(int argc, char **argv)
     if(argc > 1) {
         if(strcmp(argv[1], "run") == 0) {
             Nob_Cmd run = {0};
-            nob_cmd_append(&run, "./excel-cli");
+            nob_cmd_append(&run, "./excel-cli", "input.csv");
             if (!nob_cmd_run_sync(run)) return 1;
         } else {
             nob_log(NOB_ERROR, "%s is an unknown suncommand", argv[1]);

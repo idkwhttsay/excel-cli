@@ -57,9 +57,15 @@ const char *cell_kind_as_cstr(Cell_Kind kind) {
     }
 }
 
+typedef enum {
+    UNEVALUATED = 0,
+    INPROGRESS,
+    EVALUATED,
+} Eval_Status;
+
 typedef struct {
     Expr *ast;
-    bool evaluated;
+    Eval_Status status;
     double value;
 } Cell_Expr;
 
@@ -99,7 +105,7 @@ String_View next_token(String_View *source) {
         return sv_chop_left_while(source, is_name);
     }
 
-    fprintf(stderr, "ERROR: unknown token starts with `%c`", *source->data);
+    fprintf(stderr, "ERROR: unknown token starts with `%c`\n", *source->data);
     exit(1);
 }
 
@@ -142,7 +148,7 @@ Expr *parse_primary_expr(String_View *source) {
         expr->kind = EXPR_KIND_CELL;
 
         if (!isupper(*token.data)) {
-            fprintf(stderr, "ERROR: cell reference must start with capital letter");
+            fprintf(stderr, "ERROR: cell reference must start with capital letter\n");
             exit(1);
         }
 
@@ -312,6 +318,52 @@ void estimate_table_size(String_View content, size_t *out_rows, size_t *out_cols
     if(out_cols) *out_cols = cols;
 }
 
+void table_eval_cell(Table *table, Cell *cell);
+
+double table_eval_expr(Table *table, Expr *expr) {
+    switch(expr->kind) {
+        case EXPR_KIND_NUMBER:
+            return expr->as.number;
+        case EXPR_KIND_CELL: {
+            Cell *cell = table_cell_at(table, expr->as.cell.row, expr->as.cell.col);
+            switch(cell->kind) {
+                case CELL_KIND_NUMBER: 
+                    return cell->as.number;
+                case CELL_KIND_TEXT: {
+                    fprintf(stderr, "ERROR: CELL(%zu, %zu): text cells may not participate in math expressions\n", expr->as.cell.row, expr->as.cell.col);
+                    exit(1);
+                } break;
+                case CELL_KIND_EXPR: {
+                    table_eval_cell(table, cell);
+                    return cell->as.expr.value;
+                } break;
+            }
+        } break;
+        case EXPR_KIND_PLUS: {
+            double lhs = table_eval_expr(table, expr->as.plus.lhs);
+            double rhs = table_eval_expr(table, expr->as.plus.rhs);
+            return lhs + rhs;
+        } break;
+    }
+
+    return 0;
+}
+
+void table_eval_cell(Table *table, Cell *cell) {
+    if(cell->kind == CELL_KIND_EXPR) {
+        if(cell->as.expr.status == INPROGRESS) {
+            fprintf(stderr, "ERROR: circular dependency is detected!\n");
+            exit(1);
+        }
+        
+        if(cell->as.expr.status == UNEVALUATED) {
+            cell->as.expr.status = INPROGRESS;
+            cell->as.expr.value = table_eval_expr(table, cell->as.expr.ast);
+            cell->as.expr.status = EVALUATED;
+        }
+    } 
+}
+
 int main(int argc, char **argv) {
     if(argc < 2) {
         print_usage(stderr);
@@ -342,21 +394,24 @@ int main(int argc, char **argv) {
     for(size_t row = 0; row < table.rows; ++row) {
         for(size_t col = 0; col < table.cols; ++col) {
             Cell *cell = table_cell_at(&table, row, col);
-            printf("CELL(%zu, %zu): ", row, col);
+            table_eval_cell(&table, cell);
 
-            switch (cell->kind) {
-                case CELL_KIND_TEXT: 
-                    printf("TEXT(\""SV_Fmt"\")\n", SV_Arg(cell->as.text)); 
+            switch(cell->kind) {
+                case CELL_KIND_TEXT:
+                    printf(SV_Fmt, SV_Arg(cell->as.text));
                     break;
-                case CELL_KIND_NUMBER: 
-                    printf("TEXT(%lf)\n", cell->as.number); 
+                case CELL_KIND_NUMBER:
+                    printf("%lf", cell->as.number);
                     break;
-                case CELL_KIND_EXPR: 
-                    printf("EXPR\n");
-                    dump_expr(stdout, cell->as.expr.ast, 1); 
+                case CELL_KIND_EXPR:
+                    printf("%lf", cell->as.expr.value);
                     break;
             }
+
+            if(col < table.cols - 1) printf(" | ");
         }
+
+        printf("\n");
     }
 
     return 0;

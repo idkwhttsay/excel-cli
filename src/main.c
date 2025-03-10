@@ -5,7 +5,7 @@
 #include <assert.h>
 
 #define SV_IMPLEMENTATION
-#include "../sv.h"
+#include "sv.h"
 
 typedef struct Expr Expr;
 

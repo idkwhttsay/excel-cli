@@ -7,15 +7,33 @@
 #define SV_IMPLEMENTATION
 #include "../sv.h"
 
+typedef struct Expr Expr;
+
 typedef enum {
     EXPR_KIND_NUMBER = 0,
-    EXPR_FIND_CELL = 0,
-    EXPR_KIND_BINARY_OP,
+    EXPR_KIND_CELL, 
+    EXPR_KIND_PLUS,
 } Expr_Kind;
 
 typedef struct {
+    Expr *lhs;
+    Expr *rhs;
+} Expr_Plus;
+
+typedef struct {
+    size_t row;
+    size_t col;
+} Expr_Cell;
+typedef union {
+    double number;
+    Expr_Cell cell;
+    Expr_Plus plus; 
+} Expr_As;
+
+struct Expr {
     Expr_Kind kind;
-} Expr;
+    Expr_As as;
+};
 typedef enum {
     CELL_KIND_TEXT = 0,
     CELL_KIND_NUMBER,
@@ -37,7 +55,7 @@ const char *cell_kind_as_cstr(Cell_Kind kind) {
 typedef union {
     String_View text;
     double number;
-    Expr expr;
+    Expr *expr;
 } Cell_as;
 
 typedef struct {
@@ -50,6 +68,130 @@ typedef struct {
     size_t rows;
     size_t cols;
 } Table;
+
+bool is_name(char c) {
+    return isalnum(c) || c == '_';
+}
+
+String_View next_token(String_View *source) {
+    *source = sv_trim(*source);
+
+    if (source->count == 0) {
+        return SV_NULL;
+    }
+
+    if (*source->data == '+') {
+        return sv_chop_left(source, 1);
+    }
+
+    if (is_name(*source->data)) {
+        return sv_chop_left_while(source, is_name);
+    }
+
+    fprintf(stderr, "ERROR: unknown token starts with `%c`", *source->data);
+    exit(1);
+}
+
+bool sv_strtod(String_View sv, double *out) {
+    static char tmp_buffer[1024 * 4];
+    assert(sv.count < sizeof(tmp_buffer));
+    snprintf(tmp_buffer, sizeof(tmp_buffer), SV_Fmt, SV_Arg(sv));
+
+    char *endptr = NULL;
+    double result = strtod(tmp_buffer, &endptr);
+    if(out) *out = result;
+
+    return endptr != tmp_buffer && *endptr == '\0';
+}
+
+bool sv_strtol(String_View sv, long int *out) {
+    static char tmp_buffer[1024 * 4];
+    assert(sv.count < sizeof(tmp_buffer));
+    snprintf(tmp_buffer, sizeof(tmp_buffer), SV_Fmt, SV_Arg(sv));
+
+    char *endptr = NULL;
+    long int result = strtol(tmp_buffer, &endptr, 10);
+    if(out) *out = result;
+
+    return endptr != tmp_buffer && *endptr == '\0';
+}
+
+Expr *parse_primary_expr(String_View *source) {
+    String_View token = next_token(source);
+
+    if (token.count == 0) {
+        fprintf(stderr, "ERROR: expected primary expression token, but got end of input\n");
+        exit(1);
+    }
+
+    Expr *expr = malloc(sizeof(Expr));
+    memset(expr, 0, sizeof(Expr));
+
+    if (sv_strtod(token, &expr->as.number)) {
+        expr->kind = EXPR_KIND_NUMBER;
+    } else {
+        expr->kind = EXPR_KIND_CELL;
+
+        if (!isupper(*token.data)) {
+            fprintf(stderr, "ERROR: cell reference must start with capital letter");
+            exit(1);
+        }
+
+        expr->as.cell.col = *token.data - 'A';
+
+        sv_chop_left(&token, 1);
+
+        long int row = 0;
+        if (!sv_strtol(token, &row)) {
+            fprintf(stderr, "ERROR: cell reference must have an integer as the row number\n");
+            exit(1);
+        }
+
+        expr->as.cell.row = (size_t) row;
+    }
+
+    return expr;
+}
+
+Expr *parse_plus_expr(String_View *source) {
+    Expr *lhs = parse_primary_expr(source);
+
+    String_View token = next_token(source);
+    if(token.data != NULL && sv_eq(token, SV("+"))) {
+        Expr *rhs = parse_plus_expr(source);
+
+        Expr *expr = malloc(sizeof(Expr));
+        expr->kind = EXPR_KIND_PLUS;
+        expr->as.plus.lhs = lhs;
+        expr->as.plus.rhs = rhs;
+
+        return expr;
+    }
+
+    return lhs;
+}
+
+void dump_expr(FILE *stream, Expr *expr, int level) {
+    fprintf(stream, "%*s", level * 2, "");
+    
+    switch(expr->kind) {
+        case EXPR_KIND_NUMBER:
+            fprintf(stream, "NUMBER: %lf\n", expr->as.number);
+            break;
+        case EXPR_KIND_CELL:
+            fprintf(stream, "CELL(%zu, %zu)\n", expr->as.cell.row, expr->as.cell.col);
+            break;
+        case EXPR_KIND_PLUS:
+            fprintf(stream, "PLUS: \n");
+            dump_expr(stream, expr->as.plus.lhs, level + 1);
+            dump_expr(stream, expr->as.plus.rhs, level + 1);
+            break;
+    }
+}
+
+Expr *parse_expr(String_View *source) {
+    return parse_plus_expr(source);
+}
 
 Table table_alloc(size_t rows, size_t cols) {
     Table table = {0};
@@ -124,16 +266,11 @@ void parse_table_from_content(Table* table, String_View content) {
             Cell *cell = table_cell_at(table, row, col);
 
             if(sv_starts_with(raw_cell, SV("="))) {
+                sv_chop_left(&raw_cell, 1);
                 cell->kind = CELL_KIND_EXPR;
+                cell->as.expr = parse_expr(&raw_cell);
             } else {
-                static char tmp_buffer[1024 * 4];
-                assert(raw_cell.count < sizeof(tmp_buffer));
-                snprintf(tmp_buffer, sizeof(tmp_buffer), SV_Fmt, SV_Arg(raw_cell));
-                
-                char *endptr;
-                cell->as.number = strtod(tmp_buffer, &endptr);
-
-                if(endptr != tmp_buffer && *endptr == '\0') {
+                if(sv_strtod(raw_cell, &cell->as.number)) {
                     cell->kind = CELL_KIND_NUMBER;
                 } else {
                     cell->kind = CELL_KIND_TEXT;
@@ -193,10 +330,22 @@ int main(int argc, char **argv) {
 
     for(size_t row = 0; row < table.rows; ++row) {
         for(size_t col = 0; col < table.cols; ++col) {
-            printf("%s|", cell_kind_as_cstr(table_cell_at(&table, row, col)->kind));
-        }
+            Cell *cell = table_cell_at(&table, row, col);
+            printf("CELL(%zu, %zu): ", row, col);
 
-        printf("\n");
+            switch (cell->kind) {
+                case CELL_KIND_TEXT: 
+                    printf("TEXT(\""SV_Fmt"\")\n", SV_Arg(cell->as.text)); 
+                    break;
+                case CELL_KIND_NUMBER: 
+                    printf("TEXT(%lf)\n", cell->as.number); 
+                    break;
+                case CELL_KIND_EXPR: 
+                    printf("EXPR\n");
+                    dump_expr(stdout, cell->as.expr, 1); 
+                    break;
+            }
+        }
     }
 
     return 0;

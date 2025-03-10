@@ -11,7 +11,7 @@ typedef struct Expr Expr;
 
 typedef enum {
     EXPR_KIND_NUMBER = 0,
-    EXPR_KIND_CELL, 
+    EXPR_KIND_CELL,
     EXPR_KIND_PLUS,
 } Expr_Kind;
 
@@ -24,16 +24,18 @@ typedef struct {
     size_t row;
     size_t col;
 } Expr_Cell;
+
 typedef union {
     double number;
     Expr_Cell cell;
-    Expr_Plus plus; 
+    Expr_Plus plus;
 } Expr_As;
 
 struct Expr {
     Expr_Kind kind;
     Expr_As as;
 };
+
 typedef enum {
     CELL_KIND_TEXT = 0,
     CELL_KIND_NUMBER,
@@ -43,24 +45,33 @@ typedef enum {
 const char *cell_kind_as_cstr(Cell_Kind kind) {
     switch (kind)
     {
-    case CELL_KIND_TEXT: return "TEXT";
-    case CELL_KIND_NUMBER: return "NUMBER";
-    case CELL_KIND_EXPR: return "EXPR";
+        case CELL_KIND_TEXT: 
+            return "TEXT";
+        case CELL_KIND_NUMBER: 
+            return "NUMBER";
+        case CELL_KIND_EXPR: 
+            return "EXPR";
     default:
         assert(0 && "unreacheble");
         exit(1);
     }
 }
 
+typedef struct {
+    Expr *ast;
+    bool evaluated;
+    double value;
+} Cell_Expr;
+
 typedef union {
     String_View text;
     double number;
-    Expr *expr;
-} Cell_as;
+    Cell_Expr expr;
+} Cell_As;
 
 typedef struct {
     Cell_Kind kind;
-    Cell_as as;
+    Cell_As as;
 } Cell;
 
 typedef struct {
@@ -92,27 +103,25 @@ String_View next_token(String_View *source) {
     exit(1);
 }
 
-bool sv_strtod(String_View sv, double *out) {
+bool sv_strtod(String_View sv, double *out)
+{
     static char tmp_buffer[1024 * 4];
     assert(sv.count < sizeof(tmp_buffer));
     snprintf(tmp_buffer, sizeof(tmp_buffer), SV_Fmt, SV_Arg(sv));
-
     char *endptr = NULL;
     double result = strtod(tmp_buffer, &endptr);
-    if(out) *out = result;
-
+    if (out) *out = result;
     return endptr != tmp_buffer && *endptr == '\0';
 }
 
-bool sv_strtol(String_View sv, long int *out) {
+bool sv_strtol(String_View sv, long int *out)
+{
     static char tmp_buffer[1024 * 4];
     assert(sv.count < sizeof(tmp_buffer));
     snprintf(tmp_buffer, sizeof(tmp_buffer), SV_Fmt, SV_Arg(sv));
-
     char *endptr = NULL;
     long int result = strtol(tmp_buffer, &endptr, 10);
-    if(out) *out = result;
-
+    if (out) *out = result;
     return endptr != tmp_buffer && *endptr == '\0';
 }
 
@@ -161,6 +170,7 @@ Expr *parse_plus_expr(String_View *source) {
         Expr *rhs = parse_plus_expr(source);
 
         Expr *expr = malloc(sizeof(Expr));
+        memset(expr, 0, sizeof(Expr));
         expr->kind = EXPR_KIND_PLUS;
         expr->as.plus.lhs = lhs;
         expr->as.plus.rhs = rhs;
@@ -197,7 +207,7 @@ Table table_alloc(size_t rows, size_t cols) {
     Table table = {0};
     table.cols = cols;
     table.rows = rows;
-    table.cells = malloc(sizeof(char) * rows * cols);
+    table.cells = malloc(sizeof(Cell) * rows * cols);
 
     if(table.cells == NULL) {
         fprintf(stderr, "ERROR: could not allocate memory for the table\n");
@@ -258,23 +268,24 @@ error:
     return NULL;
 }
 
-void parse_table_from_content(Table* table, String_View content) {
-    for(size_t row = 0; content.count > 0; ++row) {
+void parse_table_from_content(Table *table, String_View content)
+{
+    for (size_t row = 0; content.count > 0; ++row) {
         String_View line = sv_chop_by_delim(&content, '\n');
-        for(size_t col = 0; line.count > 0; ++col) {
-            String_View raw_cell = sv_trim(sv_chop_by_delim(&line, '|'));
+        for (size_t col = 0; line.count > 0; ++col) {
+            String_View cell_value = sv_trim(sv_chop_by_delim(&line, '|'));
             Cell *cell = table_cell_at(table, row, col);
 
-            if(sv_starts_with(raw_cell, SV("="))) {
-                sv_chop_left(&raw_cell, 1);
+            if (sv_starts_with(cell_value, SV("="))) {
+                sv_chop_left(&cell_value, 1);
                 cell->kind = CELL_KIND_EXPR;
-                cell->as.expr = parse_expr(&raw_cell);
+                cell->as.expr.ast = parse_expr(&cell_value);
             } else {
-                if(sv_strtod(raw_cell, &cell->as.number)) {
+                if (sv_strtod(cell_value, &cell->as.number)) {
                     cell->kind = CELL_KIND_NUMBER;
                 } else {
                     cell->kind = CELL_KIND_TEXT;
-                    cell->as.text = raw_cell;
+                    cell->as.text = cell_value;
                 }
             }
         }
@@ -342,7 +353,7 @@ int main(int argc, char **argv) {
                     break;
                 case CELL_KIND_EXPR: 
                     printf("EXPR\n");
-                    dump_expr(stdout, cell->as.expr, 1); 
+                    dump_expr(stdout, cell->as.expr.ast, 1); 
                     break;
             }
         }

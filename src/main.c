@@ -70,9 +70,17 @@ void expr_buffer_dump(FILE *stream, const Expr_Buffer *eb, Expr_Index root) {
 }
 
 typedef enum {
+    DIR_LEFT = 0,
+    DIR_RIGHT,
+    DIR_UP,
+    DIR_DOWN,
+} Dir;
+
+typedef enum {
     CELL_KIND_TEXT = 0,
     CELL_KIND_NUMBER,
     CELL_KIND_EXPR,
+    CELL_KIND_CLONE,
 } Cell_Kind;
 
 const char *cell_kind_as_cstr(Cell_Kind kind) {
@@ -106,6 +114,7 @@ typedef union {
     String_View text;
     double number;
     Cell_Expr expr;
+    Dir clone;
 } Cell_As;
 
 typedef struct {
@@ -361,6 +370,8 @@ double table_eval_expr(Table *table, Expr_Buffer *eb, Expr_Index expr_index) {
             return expr->as.number;
         case EXPR_KIND_CELL: {
             Cell *cell = table_cell_at(table, expr->as.cell.row, expr->as.cell.col);
+            table_eval_cell(table, eb, cell);
+
             switch(cell->kind) {
                 case CELL_KIND_NUMBER: 
                     return cell->as.number;
@@ -369,9 +380,11 @@ double table_eval_expr(Table *table, Expr_Buffer *eb, Expr_Index expr_index) {
                     exit(1);
                 } break;
                 case CELL_KIND_EXPR: {
-                    table_eval_cell(table, eb, cell);
                     return cell->as.expr.value;
                 } break;
+                case CELL_KIND_CLONE: {
+                    assert(0 && "unreacheable");
+                } break; 
             }
         } break;
         case EXPR_KIND_PLUS: {
@@ -396,7 +409,9 @@ void table_eval_cell(Table *table, Expr_Buffer *eb, Cell *cell) {
             cell->as.expr.value = table_eval_expr(table, eb, cell->as.expr.index);
             cell->as.expr.status = EVALUATED;
         }
-    } 
+    } else if(cell->kind == CELL_KIND_CLONE) {
+        assert(0 && "todo!");
+    }
 }
 
 int main(int argc, char **argv) {
@@ -445,7 +460,10 @@ int main(int argc, char **argv) {
                 case CELL_KIND_EXPR:
                     printf("%lf", cell->as.expr.value);
                     break;
-            }
+                case CELL_KIND_CLONE:
+                    assert(0 && "unreachable: cell should never be a clone after evalution");
+                    break;
+            
 
             if(col < table.cols - 1) printf(" | ");
         }

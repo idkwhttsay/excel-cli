@@ -63,6 +63,12 @@ Expr *expr_buffer_at(Expr_Buffer *eb, Expr_Index index) {
     return &eb->items[index];
 }
 
+void expr_buffer_dump(FILE *stream, const Expr_Buffer *eb, Expr_Index root) {
+    fwrite(&root, sizeof(root), 1, stream);
+    fwrite(&eb->count, sizeof(eb->count), 1, stream); 
+    fwrite(eb->items, sizeof(Expr), eb->count, stream);
+}
+
 typedef enum {
     CELL_KIND_TEXT = 0,
     CELL_KIND_NUMBER,

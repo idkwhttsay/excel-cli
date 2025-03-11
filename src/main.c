@@ -249,8 +249,6 @@ Expr_Index parse_expr(String_View *source, Expr_Buffer *eb) {
 Cell *table_cell_at(Table *table, size_t row, size_t col) {
     assert(row < table->rows);
     assert(col < table->cols);
-    assert(row >= 0);
-    assert(col >= 0);
 
     return &table->cells[row * table->cols + col];
 }

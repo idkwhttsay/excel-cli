@@ -22,7 +22,7 @@ int main(int argc, char **argv)
     Nob_Cmd cmd = {0};
 
 #ifdef _WIN32
-    nob_cmd_append(&cmd, "./cl.exe", CFLAGS, "-o", BINARY_NAME, "src/main.c");
+    nob_cmd_append(&cmd, "gcc", CFLAGS, "-o", BINARY_NAME, "src/main.c");
 #else
     nob_cmd_append(&cmd, "cc", CFLAGS, "-o", BINARY_NAME, "src/main.c");
 #endif

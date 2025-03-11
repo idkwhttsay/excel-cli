@@ -463,7 +463,7 @@ int main(int argc, char **argv) {
                 case CELL_KIND_CLONE:
                     assert(0 && "unreachable: cell should never be a clone after evalution");
                     break;
-            
+            }
 
             if(col < table.cols - 1) printf(" | ");
         }

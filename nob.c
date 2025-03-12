@@ -2,7 +2,10 @@
 #define NOB_IMPLEMENTATION
 #include "nob.h"
 #include <stdio.h>
+
+#ifndef _WIN32
 #include <dirent.h>
+#endif 
 
 #define CFLAGS "-Wall", "-Wextra", "-std=c11", "-pedantic", "-ggdb"
 
@@ -40,7 +43,9 @@ int main(int argc, char **argv)
             Nob_Cmd lldb = {0};
             nob_cmd_append(&lldb, "lldb", "./excel-cli");
             if (!nob_cmd_run_sync(lldb)) return 1;
-        } else if (strcmp(argv[1], "run-all") == 0) {
+        } 
+#ifndef _WIN32
+        else if (strcmp(argv[1], "run-all") == 0) {
             DIR *dir;
             dir = opendir("./csv");
             if(dir) {
@@ -62,7 +67,9 @@ int main(int argc, char **argv)
             }
 
             closedir(dir);
-        } else {
+        } 
+#endif
+        else {
             nob_log(NOB_ERROR, "%s is an unknown suncommand", argv[1]);
         }
     }

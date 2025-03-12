@@ -1,6 +1,8 @@
 // nob.c
 #define NOB_IMPLEMENTATION
 #include "nob.h"
+#include <stdio.h>
+#include <dirent.h>
 
 #define CFLAGS "-Wall", "-Wextra", "-std=c11", "-pedantic", "-ggdb"
 
@@ -38,6 +40,28 @@ int main(int argc, char **argv)
             Nob_Cmd lldb = {0};
             nob_cmd_append(&lldb, "lldb", "./excel-cli");
             if (!nob_cmd_run_sync(lldb)) return 1;
+        } else if (strcmp(argv[1], "run-all") == 0) {
+            DIR *dir;
+            dir = opendir("./csv");
+            if(dir) {
+                struct dirent *cur_dir;
+                while ((cur_dir = readdir(dir)) != NULL) {
+                    if(strcmp(cur_dir->d_name, ".") == 0 || strcmp(cur_dir->d_name, "..") == 0) continue;
+                    Nob_Cmd run_csv = {0};
+                    char *input = malloc(strlen(cur_dir->d_name) + 5);
+
+                    strcpy(input, "csv/");
+                    strcat(input, cur_dir->d_name);
+
+                    nob_cmd_append(&run_csv, EXECUTABLE_NAME, input);
+                    nob_log(NOB_INFO, "Running a %s as an input", input);
+                    if (!nob_cmd_run_sync(run_csv)) nob_log(NOB_ERROR, "Error occured while running %s", cur_dir->d_name);
+                }
+            } else {
+                nob_log(NOB_ERROR, "Can't find a 'csv' folder");
+            }
+
+            closedir(dir);
         } else {
             nob_log(NOB_ERROR, "%s is an unknown suncommand", argv[1]);
         }

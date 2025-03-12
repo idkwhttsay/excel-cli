@@ -32,7 +32,7 @@ int main(int argc, char **argv)
     if(argc > 1) {
         if(strcmp(argv[1], "run") == 0) {
             Nob_Cmd run = {0};
-            nob_cmd_append(&run, EXECUTABLE_NAME, "input.csv");
+            nob_cmd_append(&run, EXECUTABLE_NAME, "csv/copy.csv");
             if (!nob_cmd_run_sync(run)) return 1;
         } else if(strcmp(argv[1], "lldb") == 0) {
             Nob_Cmd lldb = {0};

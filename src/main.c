@@ -93,9 +93,11 @@ const char *cell_kind_as_cstr(Cell_Kind kind) {
             return "NUMBER";
         case CELL_KIND_EXPR: 
             return "EXPR";
-    default:
-        assert(0 && "unreacheble");
-        exit(1);
+        case CELL_KIND_CLONE:
+            return "CLONE";
+        default:
+            assert(0 && "unreacheble");
+            exit(1);
     }
 }
 
@@ -121,12 +123,16 @@ typedef struct {
     Cell_Kind kind;
     Cell_As as;
     Eval_Status status;
+
+    size_t file_row;
+    size_t file_col;
 } Cell;
 
 typedef struct {
     Cell *cells;
     size_t rows;
     size_t cols;
+    const char *file_path;
 } Table;
 
 bool is_name(char c) {
@@ -244,6 +250,28 @@ Expr_Index parse_plus_expr(String_View *source, Tmp_Cstr *tc, Expr_Buffer *eb) {
     return lhs_index;
 }
 
+
+Cell *table_cell_at(Table *table, Cell_Index index) {
+    assert(index.row < table->rows);
+    assert(index.col < table->cols);
+
+    return &table->cells[index.row * table->cols + index.col];
+}
+
+void dump_table(FILE *stream, Table *table) {
+    for(size_t row = 0; row < table->rows; ++row) {
+        for(size_t col = 0; col < table->cols; ++col) {
+            Cell_Index cell_index = {
+                .col = col,
+                .row = row,
+            };
+
+            Cell *cell = table_cell_at(table, cell_index);
+            fprintf(stream, "%s:%zu:%zu: %s\n", table->file_path, cell->file_row, cell->file_col, cell_kind_as_cstr(cell->kind));
+        }
+    }
+}
+
 void dump_expr(FILE *stream, Expr_Buffer *eb, Expr_Index expr_index, int level) {
     fprintf(stream, "%*s", level * 2, "");
 
@@ -266,13 +294,6 @@ void dump_expr(FILE *stream, Expr_Buffer *eb, Expr_Index expr_index, int level) 
 
 Expr_Index parse_expr(String_View *source, Tmp_Cstr *tc, Expr_Buffer *eb) {
     return parse_plus_expr(source, tc, eb);
-}
-
-Cell *table_cell_at(Table *table, Cell_Index index) {
-    assert(index.row < table->rows);
-    assert(index.col < table->cols);
-
-    return &table->cells[index.row * table->cols + index.col];
 }
 
 void print_usage(FILE *stream) {
@@ -320,6 +341,7 @@ void parse_table_from_content(Table *table, Expr_Buffer *eb, Tmp_Cstr *tc, Strin
 {
     for (size_t row = 0; content.count > 0; ++row) {
         String_View line = sv_chop_by_delim(&content, '\n');
+        const char *const line_start = line.data;
         for (size_t col = 0; line.count > 0; ++col) {
             String_View cell_value = sv_trim(sv_chop_by_delim(&line, '|'));
             Cell_Index cell_index = {
@@ -328,6 +350,9 @@ void parse_table_from_content(Table *table, Expr_Buffer *eb, Tmp_Cstr *tc, Strin
             };
 
             Cell *cell = table_cell_at(table, cell_index);
+            cell->file_row = row + 1;
+            cell->file_col = cell_value.data - line_start + 1;
+
 
             if (sv_starts_with(cell_value, SV("="))) {
                 sv_chop_left(&cell_value, 1);
@@ -345,7 +370,7 @@ void parse_table_from_content(Table *table, Expr_Buffer *eb, Tmp_Cstr *tc, Strin
                 } else if(sv_eq(cell_value, SV("v"))) {
                     cell->as.clone = DIR_DOWN;
                 } else {
-                    fprintf(stderr, "ERROR: "SV_Fmt" is not a correct direction to clone a cell from \n", SV_Arg(cell_value));
+                    fprintf(stderr, "%s:%zu:%zu: ERROR: "SV_Fmt" is not a correct direction to clone a cell from \n", table->file_path, cell->file_row, cell->file_col, SV_Arg(cell_value));
                     exit(1);
                 }
             } else {
@@ -382,7 +407,7 @@ void estimate_table_size(String_View content, size_t *out_rows, size_t *out_cols
 
 void table_eval_cell(Table *table, Expr_Buffer *eb, Cell_Index cell_index);
 
-double table_eval_expr(Table *table, Expr_Buffer *eb, Expr_Index expr_index) {
+double table_eval_expr(Table *table, Expr_Buffer *eb, Cell_Index cell_index, Expr_Index expr_index) {
 
     Expr *expr = expr_buffer_at(eb, expr_index);
 
@@ -397,7 +422,9 @@ double table_eval_expr(Table *table, Expr_Buffer *eb, Expr_Index expr_index) {
                 case CELL_KIND_NUMBER: 
                     return cell->as.number;
                 case CELL_KIND_TEXT: {
-                    fprintf(stderr, "ERROR: CELL(%zu, %zu): text cells may not participate in math expressions\n", expr->as.cell.row, expr->as.cell.col);
+                    Cell *expr_cell = table_cell_at(table, cell_index);
+                    fprintf(stderr, "%s:%zu:%zu ERROR: text cells may not participate in math expressions\n", table->file_path, expr_cell->file_row, expr_cell->file_col);
+                    fprintf(stderr, "%s:%zu:%zu: NOTE: the text cell is located here", table->file_path, cell->file_row, cell->file_col);
                     exit(1);
                 } break;
                 case CELL_KIND_EXPR: {
@@ -409,8 +436,8 @@ double table_eval_expr(Table *table, Expr_Buffer *eb, Expr_Index expr_index) {
             }
         } break;
         case EXPR_KIND_PLUS: {
-            double lhs = table_eval_expr(table, eb, expr->as.plus.lhs);
-            double rhs = table_eval_expr(table, eb, expr->as.plus.rhs);
+            double lhs = table_eval_expr(table, eb, cell_index, expr->as.plus.lhs);
+            double rhs = table_eval_expr(table, eb, cell_index, expr->as.plus.rhs);
             return lhs + rhs;
         } break;
     }
@@ -497,13 +524,13 @@ void table_eval_cell(Table *table, Expr_Buffer *eb, Cell_Index cell_index) {
             break;
         case CELL_KIND_EXPR: { 
             if(cell->status == INPROGRESS) {
-                fprintf(stderr, "ERROR: circular dependency is detected!\n");
+                fprintf(stderr, "%s:%zu:%zu: ERROR: circular dependency is detected!\n", table->file_path, cell->file_row, cell->file_col);
                 exit(1);
             }
 
             if(cell->status == UNEVALUATED) {
                 cell->status = INPROGRESS;
-                cell->as.expr.value = table_eval_expr(table, eb, cell->as.expr.index);
+                cell->as.expr.value = table_eval_expr(table, eb, cell_index, cell->as.expr.index);
                 cell->status = EVALUATED;
             }
         } break;
@@ -528,7 +555,7 @@ void table_eval_cell(Table *table, Expr_Buffer *eb, Cell_Index cell_index) {
 
                 if(cell->kind == CELL_KIND_EXPR) {
                     cell->as.expr.index = move_expr_in_dir(eb, cell->as.expr.index, opposite_dir(dir));
-                    cell->as.expr.value = table_eval_expr(table, eb, cell->as.expr.index);
+                    cell->as.expr.value = table_eval_expr(table, eb, cell_index, cell->as.expr.index);
                 }
 
                 cell->status = EVALUATED;
@@ -563,7 +590,9 @@ int main(int argc, char **argv) {
     };
 
     Expr_Buffer eb = {0};
-    Table table = {0};
+    Table table = {
+        .file_path = input_file_path,
+    };
     Tmp_Cstr tc = {0};
 
     estimate_table_size(input, &table.rows, &table.cols);

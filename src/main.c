@@ -43,7 +43,8 @@ typedef struct {
     Expr *items;
 } Expr_Buffer;
 
-Expr_Index expr_buffer_alloc(Expr_Buffer *eb) {
+Expr_Index expr_buffer_alloc(Expr_Buffer *eb) 
+{
     if(eb->count >= eb->capacity) {
         if(eb->capacity == 0) {
             assert(eb->items == NULL);
@@ -59,12 +60,14 @@ Expr_Index expr_buffer_alloc(Expr_Buffer *eb) {
     return eb->count++;
 }
 
-Expr *expr_buffer_at(Expr_Buffer *eb, Expr_Index index) {
+Expr *expr_buffer_at(Expr_Buffer *eb, Expr_Index index) 
+{
     assert(index < eb->count);
     return &eb->items[index];
 }
 
-void expr_buffer_dump(FILE *stream, const Expr_Buffer *eb, Expr_Index root) {
+void expr_buffer_dump(FILE *stream, const Expr_Buffer *eb, Expr_Index root) 
+{
     fwrite(&root, sizeof(root), 1, stream);
     fwrite(&eb->count, sizeof(eb->count), 1, stream); 
     fwrite(eb->items, sizeof(Expr), eb->count, stream);
@@ -84,7 +87,8 @@ typedef enum {
     CELL_KIND_CLONE,
 } Cell_Kind;
 
-const char *cell_kind_as_cstr(Cell_Kind kind) {
+const char *cell_kind_as_cstr(Cell_Kind kind) 
+{
     switch (kind)
     {
         case CELL_KIND_TEXT: 
@@ -135,11 +139,13 @@ typedef struct {
     const char *file_path;
 } Table;
 
-bool is_name(char c) {
+bool is_name(char c) 
+{
     return isalnum(c) || c == '_';
 }
 
-String_View next_token(String_View *source) {
+String_View next_token(String_View *source, const char *file_path, size_t file_row, size_t file_col) 
+{
     *source = sv_trim(*source);
 
     if (source->count == 0) {
@@ -154,7 +160,7 @@ String_View next_token(String_View *source) {
         return sv_chop_left_while(source, is_name);
     }
 
-    fprintf(stderr, "ERROR: unknown token starts with `%c`\n", *source->data);
+    fprintf(stderr, "%s:%zu:%zu: ERROR: unknown token starts with `%c`\n", file_path, file_row, file_col, *source->data);
     exit(1);
 }
 
@@ -163,7 +169,8 @@ typedef struct {
     char *cstr;
 } Tmp_Cstr;
 
-char *tmp_cstr_fill(Tmp_Cstr *tc, const char *data, size_t data_size) {
+char *tmp_cstr_fill(Tmp_Cstr *tc, const char *data, size_t data_size) 
+{
     if(data_size + 1 >= tc->capacity) {
         tc->capacity = data_size + 1;
         tc->cstr = realloc(tc->cstr, tc->capacity);
@@ -192,11 +199,13 @@ bool sv_strtol(String_View sv, Tmp_Cstr *tc, long int *out)
     return endptr != ptr && *endptr == '\0';
 }
 
-Expr_Index parse_primary_expr(String_View *source, Tmp_Cstr *tc, Expr_Buffer *eb) {
-    String_View token = next_token(source);
+Expr_Index parse_primary_expr(String_View *source, Tmp_Cstr *tc, Expr_Buffer *eb, 
+    const char *file_path, size_t file_row, size_t file_col) 
+{
+    String_View token = next_token(source, file_path, file_row, file_col);
 
     if (token.count == 0) {
-        fprintf(stderr, "ERROR: expected primary expression token, but got end of input\n");
+        fprintf(stderr, "%s:%zu:%zu: ERROR: expected primary expression token, but got end of input\n", file_path, file_row, file_col);
         exit(1);
     }
 
@@ -209,7 +218,7 @@ Expr_Index parse_primary_expr(String_View *source, Tmp_Cstr *tc, Expr_Buffer *eb
         expr->kind = EXPR_KIND_CELL;
 
         if (!isupper(*token.data)) {
-            fprintf(stderr, "ERROR: cell reference must start with capital letter\n");
+            fprintf(stderr, "%s:%zu:%zu: ERROR: cell reference must start with capital letter\n", file_path, file_row, file_col);
             exit(1);
         }
 
@@ -219,7 +228,7 @@ Expr_Index parse_primary_expr(String_View *source, Tmp_Cstr *tc, Expr_Buffer *eb
 
         long int row = 0;
         if (!sv_strtol(token, tc, &row)) {
-            fprintf(stderr, "ERROR: cell reference must have an integer as the row number\n");
+            fprintf(stderr, "%s:%zu:%zu: ERROR: cell reference must have an integer as the row number\n", file_path, file_row, file_col);
             exit(1);
         }
 
@@ -229,12 +238,14 @@ Expr_Index parse_primary_expr(String_View *source, Tmp_Cstr *tc, Expr_Buffer *eb
     return expr_index;
 }
 
-Expr_Index parse_plus_expr(String_View *source, Tmp_Cstr *tc, Expr_Buffer *eb) {
-    Expr_Index lhs_index = parse_primary_expr(source, tc, eb);
+Expr_Index parse_plus_expr(String_View *source, Tmp_Cstr *tc, Expr_Buffer *eb,
+    const char *file_path, size_t file_row, size_t file_col) 
+{
+    Expr_Index lhs_index = parse_primary_expr(source, tc, eb, file_path, file_row,file_col);
 
-    String_View token = next_token(source);
+    String_View token = next_token(source, file_path, file_row, file_col);
     if(token.data != NULL && sv_eq(token, SV("+"))) {
-        Expr_Index rhs_index = parse_plus_expr(source, tc, eb);
+        Expr_Index rhs_index = parse_plus_expr(source, tc, eb, file_path, file_row, file_col);
 
         Expr_Index expr_index = expr_buffer_alloc(eb);
         Expr *expr = expr_buffer_at(eb, expr_index);
@@ -251,14 +262,16 @@ Expr_Index parse_plus_expr(String_View *source, Tmp_Cstr *tc, Expr_Buffer *eb) {
 }
 
 
-Cell *table_cell_at(Table *table, Cell_Index index) {
+Cell *table_cell_at(Table *table, Cell_Index index) 
+{
     assert(index.row < table->rows);
     assert(index.col < table->cols);
 
     return &table->cells[index.row * table->cols + index.col];
 }
 
-void dump_table(FILE *stream, Table *table) {
+void dump_table(FILE *stream, Table *table) 
+{
     for(size_t row = 0; row < table->rows; ++row) {
         for(size_t col = 0; col < table->cols; ++col) {
             Cell_Index cell_index = {
@@ -272,7 +285,8 @@ void dump_table(FILE *stream, Table *table) {
     }
 }
 
-void dump_expr(FILE *stream, Expr_Buffer *eb, Expr_Index expr_index, int level) {
+void dump_expr(FILE *stream, Expr_Buffer *eb, Expr_Index expr_index, int level) 
+{
     fprintf(stream, "%*s", level * 2, "");
 
     Expr *expr = expr_buffer_at(eb, expr_index);
@@ -292,15 +306,19 @@ void dump_expr(FILE *stream, Expr_Buffer *eb, Expr_Index expr_index, int level) 
     }
 }
 
-Expr_Index parse_expr(String_View *source, Tmp_Cstr *tc, Expr_Buffer *eb) {
-    return parse_plus_expr(source, tc, eb);
+Expr_Index parse_expr(String_View *source, Tmp_Cstr *tc, Expr_Buffer *eb, 
+    const char *file_path, size_t file_row, size_t file_col) 
+{
+    return parse_plus_expr(source, tc, eb, file_path, file_row, file_col);
 }
 
-void print_usage(FILE *stream) {
+void print_usage(FILE *stream) 
+{
     fprintf(stream, "Usage: ./excel-cli <input.csv>\n");
 }
 
-char *read_csv(const char *file_path, size_t *size) {
+char *read_csv(const char *file_path, size_t *size) 
+{
 
     char *buffer = NULL;
     FILE *f = fopen(file_path, "rb");
@@ -357,7 +375,8 @@ void parse_table_from_content(Table *table, Expr_Buffer *eb, Tmp_Cstr *tc, Strin
             if (sv_starts_with(cell_value, SV("="))) {
                 sv_chop_left(&cell_value, 1);
                 cell->kind = CELL_KIND_EXPR;
-                cell->as.expr.index = parse_expr(&cell_value, tc, eb);
+                cell->as.expr.index = parse_expr(&cell_value, tc, eb, table->file_path, 
+                    cell->file_row, cell->file_col);
             } else if(sv_starts_with(cell_value, SV(":"))) {
                 sv_chop_left(&cell_value, 1);
                 cell->kind = CELL_KIND_CLONE;
@@ -385,7 +404,8 @@ void parse_table_from_content(Table *table, Expr_Buffer *eb, Tmp_Cstr *tc, Strin
     }
 }
 
-void estimate_table_size(String_View content, size_t *out_rows, size_t *out_cols) {
+void estimate_table_size(String_View content, size_t *out_rows, size_t *out_cols) 
+{
     size_t rows = 0;
     size_t cols = 0;
     for(; content.count > 0; ++rows) {
@@ -407,7 +427,8 @@ void estimate_table_size(String_View content, size_t *out_rows, size_t *out_cols
 
 void table_eval_cell(Table *table, Expr_Buffer *eb, Cell_Index cell_index);
 
-double table_eval_expr(Table *table, Expr_Buffer *eb, Cell_Index cell_index, Expr_Index expr_index) {
+double table_eval_expr(Table *table, Expr_Buffer *eb, Cell_Index cell_index, Expr_Index expr_index) 
+{
 
     Expr *expr = expr_buffer_at(eb, expr_index);
 
@@ -445,7 +466,8 @@ double table_eval_expr(Table *table, Expr_Buffer *eb, Cell_Index cell_index, Exp
     return 0;
 }
 
-Dir opposite_dir(Dir dir) {
+Dir opposite_dir(Dir dir) 
+{
     switch(dir) {
         case DIR_LEFT: return DIR_RIGHT;
         case DIR_RIGHT: return DIR_LEFT;
@@ -459,7 +481,8 @@ Dir opposite_dir(Dir dir) {
 }
 
 // TODO: check neighbor bounds
-Cell_Index nbor_in_dir(Cell_Index index, Dir dir) {
+Cell_Index nbor_in_dir(Cell_Index index, Dir dir) 
+{
     switch(dir) {
         case DIR_LEFT:
             index.col --;
@@ -482,7 +505,8 @@ Cell_Index nbor_in_dir(Cell_Index index, Dir dir) {
     return index;
 }
 
-Expr_Index move_expr_in_dir(Expr_Buffer *eb, Expr_Index root, Dir dir) {
+Expr_Index move_expr_in_dir(Expr_Buffer *eb, Expr_Index root, Dir dir) 
+{
     switch (expr_buffer_at(eb, root)->kind) {
         case EXPR_KIND_NUMBER:
             return root;
@@ -514,7 +538,8 @@ Expr_Index move_expr_in_dir(Expr_Buffer *eb, Expr_Index root, Dir dir) {
     }
 }
 
-void table_eval_cell(Table *table, Expr_Buffer *eb, Cell_Index cell_index) {
+void table_eval_cell(Table *table, Expr_Buffer *eb, Cell_Index cell_index) 
+{
     Cell *cell = table_cell_at(table, cell_index);
 
     switch(cell->kind) {
@@ -537,7 +562,7 @@ void table_eval_cell(Table *table, Expr_Buffer *eb, Cell_Index cell_index) {
 
         case CELL_KIND_CLONE: {
             if(cell->status == INPROGRESS) {
-                fprintf(stderr, "ERROR: circular dependency is detected!\n");
+                fprintf(stderr, "%s:%zu:%zu: ERROR: circular dependency is detected!\n", table->file_path, cell->file_row, cell->file_col);
                 exit(1);
             }
 
@@ -567,7 +592,8 @@ void table_eval_cell(Table *table, Expr_Buffer *eb, Cell_Index cell_index) {
     }
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv) 
+{
     if(argc < 2) {
         print_usage(stderr);
         fprintf(stderr, "ERROR: input file is not provided\n");

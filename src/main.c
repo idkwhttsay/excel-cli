@@ -144,7 +144,14 @@ bool is_name(char c)
     return isalnum(c) || c == '_';
 }
 
-String_View next_token(String_View *source, const char *file_path, size_t file_row, size_t file_col) 
+typedef struct {
+    String_View source;
+    const char* file_path;
+    size_t file_row;
+    const char *line_start;
+} Lexer;
+
+String_View next_token(String_View *source, const char *file_path, size_t file_row, const char *line_start) 
 {
     *source = sv_trim(*source);
 
@@ -160,7 +167,7 @@ String_View next_token(String_View *source, const char *file_path, size_t file_r
         return sv_chop_left_while(source, is_name);
     }
 
-    fprintf(stderr, "%s:%zu:%zu: ERROR: unknown token starts with `%c`\n", file_path, file_row, file_col, *source->data);
+    fprintf(stderr, "%s:%zu:%zu: ERROR: unknown token starts with `%c`\n", file_path, file_row, source->data - line_start + 1, *source->data);
     exit(1);
 }
 
@@ -200,12 +207,12 @@ bool sv_strtol(String_View sv, Tmp_Cstr *tc, long int *out)
 }
 
 Expr_Index parse_primary_expr(String_View *source, Tmp_Cstr *tc, Expr_Buffer *eb, 
-    const char *file_path, size_t file_row, size_t file_col) 
+    const char *file_path, size_t file_row, const char *line_start) 
 {
-    String_View token = next_token(source, file_path, file_row, file_col);
+    String_View token = next_token(source, file_path, file_row, line_start);
 
     if (token.count == 0) {
-        fprintf(stderr, "%s:%zu:%zu: ERROR: expected primary expression token, but got end of input\n", file_path, file_row, file_col);
+        fprintf(stderr, "%s:%zu:%zu: ERROR: expected primary expression token, but got end of input\n", file_path, file_row, source->data - line_start + 1);
         exit(1);
     }
 
@@ -218,7 +225,7 @@ Expr_Index parse_primary_expr(String_View *source, Tmp_Cstr *tc, Expr_Buffer *eb
         expr->kind = EXPR_KIND_CELL;
 
         if (!isupper(*token.data)) {
-            fprintf(stderr, "%s:%zu:%zu: ERROR: cell reference must start with capital letter\n", file_path, file_row, file_col);
+            fprintf(stderr, "%s:%zu:%zu: ERROR: cell reference must start with capital letter\n", file_path, file_row, source->data - line_start + 1);
             exit(1);
         }
 
@@ -228,7 +235,7 @@ Expr_Index parse_primary_expr(String_View *source, Tmp_Cstr *tc, Expr_Buffer *eb
 
         long int row = 0;
         if (!sv_strtol(token, tc, &row)) {
-            fprintf(stderr, "%s:%zu:%zu: ERROR: cell reference must have an integer as the row number\n", file_path, file_row, file_col);
+            fprintf(stderr, "%s:%zu:%zu: ERROR: cell reference must have an integer as the row number\n", file_path, file_row, source->data - line_start + 1);
             exit(1);
         }
 
@@ -239,13 +246,13 @@ Expr_Index parse_primary_expr(String_View *source, Tmp_Cstr *tc, Expr_Buffer *eb
 }
 
 Expr_Index parse_plus_expr(String_View *source, Tmp_Cstr *tc, Expr_Buffer *eb,
-    const char *file_path, size_t file_row, size_t file_col) 
+    const char *file_path, size_t file_row, const char *line_start) 
 {
-    Expr_Index lhs_index = parse_primary_expr(source, tc, eb, file_path, file_row,file_col);
+    Expr_Index lhs_index = parse_primary_expr(source, tc, eb, file_path, file_row, line_start);
 
-    String_View token = next_token(source, file_path, file_row, file_col);
+    String_View token = next_token(source, file_path, file_row, line_start);
     if(token.data != NULL && sv_eq(token, SV("+"))) {
-        Expr_Index rhs_index = parse_plus_expr(source, tc, eb, file_path, file_row, file_col);
+        Expr_Index rhs_index = parse_plus_expr(source, tc, eb, file_path, file_row, line_start);
 
         Expr_Index expr_index = expr_buffer_alloc(eb);
         Expr *expr = expr_buffer_at(eb, expr_index);
@@ -307,9 +314,9 @@ void dump_expr(FILE *stream, Expr_Buffer *eb, Expr_Index expr_index, int level)
 }
 
 Expr_Index parse_expr(String_View *source, Tmp_Cstr *tc, Expr_Buffer *eb, 
-    const char *file_path, size_t file_row, size_t file_col) 
+    const char *file_path, size_t file_row, const char *line_start) 
 {
-    return parse_plus_expr(source, tc, eb, file_path, file_row, file_col);
+    return parse_plus_expr(source, tc, eb, file_path, file_row, line_start);
 }
 
 void print_usage(FILE *stream) 
@@ -376,7 +383,7 @@ void parse_table_from_content(Table *table, Expr_Buffer *eb, Tmp_Cstr *tc, Strin
                 sv_chop_left(&cell_value, 1);
                 cell->kind = CELL_KIND_EXPR;
                 cell->as.expr.index = parse_expr(&cell_value, tc, eb, table->file_path, 
-                    cell->file_row, cell->file_col);
+                    cell->file_row, line_start);
             } else if(sv_starts_with(cell_value, SV(":"))) {
                 sv_chop_left(&cell_value, 1);
                 cell->kind = CELL_KIND_CLONE;

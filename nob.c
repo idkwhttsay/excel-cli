@@ -7,7 +7,9 @@
 #include <dirent.h>
 #endif 
 
-#define CFLAGS "-Wall", "-Wextra", "-std=c11", "-pedantic", "-ggdb"
+#define CFLAGS "-Wall", "-Wextra", "-Wswitch-enum", "-std=c11", "-pedantic", "-ggdb"
+// #define RUN_FILE "csv/stress-copy.csv"
+#define RUN_FILE "csv/error.csv"
 
 #ifdef _WIN32
 #define BINARY_NAME "excel-cli.exe"
@@ -37,7 +39,7 @@ int main(int argc, char **argv)
     if(argc > 1) {
         if(strcmp(argv[1], "run") == 0) {
             Nob_Cmd run = {0};
-            nob_cmd_append(&run, EXECUTABLE_NAME, "csv/stress-copy.csv");
+            nob_cmd_append(&run, EXECUTABLE_NAME, RUN_FILE);
             if (!nob_cmd_run_sync(run)) return 1;
         } else if(strcmp(argv[1], "lldb") == 0) {
             Nob_Cmd lldb = {0};

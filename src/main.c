@@ -512,7 +512,6 @@ Dir opposite_dir(Dir dir)
     }
 }
 
-// TODO: check neighbor bounds
 Cell_Index nbor_in_dir(Cell_Index index, Dir dir) 
 {
     switch(dir) {

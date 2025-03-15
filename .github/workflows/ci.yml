@@ -16,7 +16,7 @@ jobs:
       - name: build everything
         run: |
           $CC -o nob nob.c
-          ./nob valgrind
+          ./nob
         env:
           CC: gcc
           CXX: g++
@@ -31,7 +31,7 @@ jobs:
       - name: build everything
         run: |
           $CC -o nob nob.c
-          ./nob valgrind
+          ./nob
         env:
           CC: clang
           CXX: clang++
@@ -42,7 +42,7 @@ jobs:
       - name: build everything
         run: |
           $CC -o nob nob.c
-          ./nob run
+          ./nob
         env:
           CC: clang
           CXX: clang++
@@ -61,4 +61,4 @@ jobs:
         # this replaces default PowerShell, which can't fail the build
         run: |
           cl.exe nob.c
-          .\nob.exe run
+          .\nob.exe

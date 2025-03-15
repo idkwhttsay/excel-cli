@@ -1,3 +1,12 @@
+/*
+ * Simple Spreadsheet Expression Parser
+ *
+ * This program implements a basic expression parsing system for a spreadsheet-like application.
+ * It supports operations such as numerical expressions, cell references, and addition operations.
+ * The program reads a CSV file containing expressions and parses them into an expression tree.
+ */
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,57 +16,69 @@
 #define SV_IMPLEMENTATION
 #include "sv.h"
 
+// Forward declaration of the Expr structure
 typedef struct Expr Expr;
 typedef size_t Expr_Index;
 
-#define PRINT_OFFSET -20
+#define PRINT_OFFSET -20 // Offset for formatted printing
 
+// Enum representing different kinds of expressions
 typedef enum {
-    EXPR_KIND_NUMBER = 0,
-    EXPR_KIND_CELL,
-    EXPR_KIND_PLUS,
+    EXPR_KIND_NUMBER = 0, // Numeric constant
+    EXPR_KIND_CELL,       // Cell reference
+    EXPR_KIND_PLUS        // Addition operation
 } Expr_Kind;
 
+// Structure for representing an addition expression
 typedef struct {
-    Expr_Index lhs;
-    Expr_Index rhs;
+    Expr_Index lhs; // Left-hand side expression
+    Expr_Index rhs; // Right-hand side expression
 } Expr_Plus;
 
+// Structure representing a cell index in the spreadsheet
 typedef struct {
     size_t row;
     size_t col;
 } Cell_Index;
 
+// Union storing different types of expressions
 typedef union {
-    double number;
-    Cell_Index cell;
-    Expr_Plus plus;
+    double number;  // Numeric value
+    Cell_Index cell; // Cell reference
+    Expr_Plus plus;  // Addition operation
 } Expr_As;
 
+// Structure representing an expression
 struct Expr {
-    Expr_Kind kind;
-    Expr_As as;
-    const char *file_path;
-    size_t file_row;
-    size_t file_col;
+    Expr_Kind kind;  // Type of the expression
+    Expr_As as;      // Expression data
+    const char *file_path; // File path for error tracking
+    size_t file_row; // Row in the source file
+    size_t file_col; // Column in the source file
 };
 
+// Buffer to store and manage expressions dynamically
 typedef struct {
-    size_t count;
-    size_t capacity;
-    Expr *items;
+    size_t count;    // Number of expressions stored
+    size_t capacity; // Total capacity of the buffer
+    Expr *items;     // Array of expressions
 } Expr_Buffer;
 
+/**
+ * Allocates a new expression in the buffer.
+ * 
+ * @param eb Pointer to the expression buffer.
+ * @return The index of the newly allocated expression.
+ */
 Expr_Index expr_buffer_alloc(Expr_Buffer *eb) 
 {
-    if(eb->count >= eb->capacity) {
-        if(eb->capacity == 0) {
+    if (eb->count >= eb->capacity) {
+        if (eb->capacity == 0) {
             assert(eb->items == NULL);
             eb->capacity = 128;
         } else {
             eb->capacity *= 2;
         }
-
         eb->items = realloc(eb->items, sizeof(Expr) * eb->capacity);
     }   
 
@@ -65,12 +86,26 @@ Expr_Index expr_buffer_alloc(Expr_Buffer *eb)
     return eb->count++;
 }
 
+/**
+ * Retrieves an expression from the buffer at a given index.
+ *
+ * @param eb Pointer to the expression buffer.
+ * @param index Index of the expression to retrieve.
+ * @return Pointer to the requested expression.
+ */
 Expr *expr_buffer_at(Expr_Buffer *eb, Expr_Index index) 
 {
     assert(index < eb->count);
     return &eb->items[index];
 }
 
+/**
+ * Dumps the expression buffer to a file.
+ *
+ * @param stream Output file stream.
+ * @param eb Pointer to the expression buffer.
+ * @param root Root index of the expression tree.
+ */
 void expr_buffer_dump(FILE *stream, const Expr_Buffer *eb, Expr_Index root) 
 {
     fwrite(&root, sizeof(root), 1, stream);
@@ -85,6 +120,7 @@ typedef enum {
     DIR_DOWN,
 } Dir;
 
+// Enums defining spreadsheet cell types and evaluation status
 typedef enum {
     CELL_KIND_TEXT = 0,
     CELL_KIND_NUMBER,
@@ -92,20 +128,22 @@ typedef enum {
     CELL_KIND_CLONE,
 } Cell_Kind;
 
+/**
+ * Prints the kind of a cell as a string.
+ *
+ * @param kind The cell kind enum.
+ * @return A string representation of the cell kind.
+ */
 const char *cell_kind_as_cstr(Cell_Kind kind) 
 {
     switch (kind)
     {
-        case CELL_KIND_TEXT: 
-            return "TEXT";
-        case CELL_KIND_NUMBER: 
-            return "NUMBER";
-        case CELL_KIND_EXPR: 
-            return "EXPR";
-        case CELL_KIND_CLONE:
-            return "CLONE";
+        case CELL_KIND_TEXT: return "TEXT";
+        case CELL_KIND_NUMBER: return "NUMBER";
+        case CELL_KIND_EXPR: return "EXPR";
+        case CELL_KIND_CLONE: return "CLONE";
         default:
-            assert(0 && "unreacheble");
+            assert(0 && "unreachable");
             exit(1);
     }
 }
@@ -128,6 +166,7 @@ typedef union {
     Dir clone;
 } Cell_As;
 
+// Structure representing a spreadsheet cell
 typedef struct {
     Cell_Kind kind;
     Cell_As as;
@@ -137,6 +176,7 @@ typedef struct {
     size_t file_col;
 } Cell;
 
+// Table structure representing the spreadsheet
 typedef struct {
     Cell *cells;
     size_t rows;
@@ -306,23 +346,32 @@ Expr_Index parse_plus_expr(Lexer *lexer, Tmp_Cstr *tc, Expr_Buffer *eb)
 }
 
 
+
+/**
+ * Retrieves a cell from the table at a given index.
+ *
+ * @param table Pointer to the table structure.
+ * @param index Index of the cell to retrieve.
+ * @return Pointer to the requested cell.
+ */
 Cell *table_cell_at(Table *table, Cell_Index index) 
 {
     assert(index.row < table->rows);
     assert(index.col < table->cols);
-
     return &table->cells[index.row * table->cols + index.col];
 }
 
+/**
+ * Dumps the table contents to an output stream.
+ *
+ * @param stream Output file stream.
+ * @param table Pointer to the table structure.
+ */
 void dump_table(FILE *stream, Table *table) 
 {
     for(size_t row = 0; row < table->rows; ++row) {
         for(size_t col = 0; col < table->cols; ++col) {
-            Cell_Index cell_index = {
-                .col = col,
-                .row = row,
-            };
-
+            Cell_Index cell_index = {.col = col, .row = row};
             Cell *cell = table_cell_at(table, cell_index);
             fprintf(stream, "%s:%zu:%zu: %s\n", table->file_path, cell->file_row, cell->file_col, cell_kind_as_cstr(cell->kind));
         }
@@ -355,10 +404,16 @@ Expr_Index parse_expr(Lexer *lexer, Tmp_Cstr *tc, Expr_Buffer *eb)
     return parse_plus_expr(lexer, tc, eb);
 }
 
+/**
+ * Prints usage information for the program.
+ *
+ * @param stream Output file stream.
+ */
 void print_usage(FILE *stream) 
 {
     fprintf(stream, "Usage: ./excel-cli <input.csv>\n");
 }
+
 
 char *read_csv(const char *file_path, size_t *size) 
 {

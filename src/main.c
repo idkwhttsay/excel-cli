@@ -220,6 +220,7 @@ bool sv_strtol(String_View sv, Tmp_Cstr *tc, long int *out)
 
 Expr_Index parse_primary_expr(Lexer *lexer, Tmp_Cstr *tc, Expr_Buffer *eb) 
 {
+    size_t token_col = lexer_file_col(lexer);
     String_View token = next_token(lexer);
 
     if (token.count == 0) {
@@ -232,7 +233,7 @@ Expr_Index parse_primary_expr(Lexer *lexer, Tmp_Cstr *tc, Expr_Buffer *eb)
     Expr *expr = expr_buffer_at(eb, expr_index);
     expr->file_path = lexer->file_path;
     expr->file_row = lexer->file_row;
-    expr->file_col = lexer_file_col(lexer);
+    expr->file_col = token_col;
 
     if (sv_strtod(token, tc, &expr->as.number)) {
         expr->kind = EXPR_KIND_NUMBER;

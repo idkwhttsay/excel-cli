@@ -173,7 +173,8 @@ Token lexer_next_token(Lexer *lexer)
 {
     lexer->source = sv_trim(lexer->source);
 
-    Token token = {0};
+    Token token;
+    memset(&token, 0, sizeof(token));
     token.file_path = lexer->file_path;
     token.file_row = lexer->file_row;
     token.file_col = lexer_file_col(lexer);

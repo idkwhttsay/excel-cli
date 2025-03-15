@@ -624,8 +624,13 @@ void table_eval_cell(Table *table, Expr_Buffer *eb, Cell_Index cell_index)
                 
                 Dir dir = cell->as.clone;
                 Cell_Index nbor_index = nbor_in_dir(cell_index, dir);
+                
+                if(nbor_index.row >= table->rows || nbor_index.col >= table->cols) {
+                    fprintf(stderr, "%s:%zu:%zu: ERROR: trying to clone a cell outside of the table\n", table->file_path, cell->file_row, cell->file_col);
+                    exit(1);
+                }
+                
                 table_eval_cell(table, eb, nbor_index);
-
                 
                 Cell *nbor = table_cell_at(table, nbor_index);
                 cell->kind = nbor->kind;

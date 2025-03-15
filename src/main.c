@@ -10,6 +10,8 @@
 typedef struct Expr Expr;
 typedef size_t Expr_Index;
 
+#define PRINT_OFFSET -20
+
 typedef enum {
     EXPR_KIND_NUMBER = 0,
     EXPR_KIND_CELL,
@@ -664,6 +666,31 @@ void table_eval_cell(Table *table, Expr_Buffer *eb, Cell_Index cell_index)
     }
 }
 
+const char* sv_take_first_n(const char* input, size_t count) {
+    if (input == NULL) {
+        return NULL;
+    }
+    
+    size_t input_length = strlen(input);
+    
+    if (count > input_length) {
+        count = input_length;
+    }
+    
+    char* result = (char*)malloc((count + 1) * sizeof(char));
+    if (result == NULL) {
+        return NULL; // Memory allocation failed
+    }
+    
+    for (size_t i = 0; i < count; i++) {
+        result[i] = input[i];
+    }
+    
+    result[count] = '\0';
+    
+    return result;
+}
+
 int main(int argc, char **argv) 
 {
     if(argc < 2) {
@@ -719,14 +746,16 @@ int main(int argc, char **argv)
             Cell *cell = table_cell_at(&table, cell_index);
 
             switch(cell->kind) {
-                case CELL_KIND_TEXT:
-                    printf(SV_Fmt, SV_Arg(cell->as.text));
+                case CELL_KIND_TEXT: {
+                    const char *text = sv_take_first_n(cell->as.text.data, cell->as.text.count);
+                    printf("%-*s", PRINT_OFFSET, text);
                     break;
+                }
                 case CELL_KIND_NUMBER:
-                    printf("%lf", cell->as.number);
+                    printf("%-*lf", PRINT_OFFSET, cell->as.number);
                     break;
                 case CELL_KIND_EXPR:
-                    printf("%lf", cell->as.expr.value);
+                    printf("%-*lf", PRINT_OFFSET, cell->as.expr.value);
                     break;
                 case CELL_KIND_CLONE:
                     assert(0 && "unreachable: cell should never be a clone after evalution");

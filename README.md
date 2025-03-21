@@ -39,7 +39,14 @@ The project is using [nob](https://github.com/tsoding/nob.h) build system.
 ```console
 $ cc -o nob nob.c
 $ ./nob
-$ ./excel-cli csv/bills.csv
+$ ./excel-cli csv/bills.csv out/bills.csv
+```
+
+OR
+
+```console
+$ cc -o nob nob.c
+$ ./nob run
 ```
 
 ## Syntax

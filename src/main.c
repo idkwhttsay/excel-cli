@@ -941,6 +941,7 @@ int main(int argc, char **argv)
     memset(table.cells, 0, sizeof(*table.cells) * table.rows * table.cols);
     parse_table_from_content(&table, &eb, &tc, input);
 
+    // Evaluate each cell
     for(size_t row = 0; row < table.rows; ++row) {
         for(size_t col = 0; col < table.cols; ++col) {
             Cell_Index cell_index = {
@@ -952,6 +953,55 @@ int main(int argc, char **argv)
         }
     }
 
+    // Estimate column widths
+    size_t *col_widths = malloc(sizeof(size_t) * table.cols);
+    {
+        for (size_t col = 0; col < table.cols; ++col) {
+            col_widths[col] = 0;
+            for (size_t row = 0; row < table.rows; ++row) {
+                Cell_Index cell_index = {
+                    .row = row,
+                    .col = col,
+                };
+
+                Cell *cell = table_cell_at(&table, cell_index);
+                size_t width = 0;
+                switch (cell->kind) {
+                case CELL_KIND_TEXT:
+                    width = cell->as.text.count;
+                    break;
+
+                case CELL_KIND_NUMBER: {
+                    int n = snprintf(NULL, 0, "%lf", cell->as.number);
+                    assert(n >= 0);
+                    width = (size_t) n;
+                }
+                break;
+
+                case CELL_KIND_EXPR: {
+                    int n = snprintf(NULL, 0, "%lf", cell->as.expr.value);
+                    assert(n >= 0);
+                    width = (size_t) n;
+                }
+                break;
+
+                case CELL_KIND_CLONE:
+                    assert(0 && "unreachable: cell should never be a clone after the evaluation");
+                    exit(69);
+
+                default:
+                    assert(0 && "unreachable");
+                    exit(69);
+                }
+
+                if (col_widths[col] < width) {
+                    col_widths[col] = width;
+                }
+            }
+        }
+    }
+
+    // Render the table
     for(size_t row = 0; row < table.rows; ++row) {
         for(size_t col = 0; col < table.cols; ++col) {
             Cell_Index cell_index = {
@@ -960,23 +1010,29 @@ int main(int argc, char **argv)
             };
 
             Cell *cell = table_cell_at(&table, cell_index);
+            int printn = 0;
 
             switch(cell->kind) {
-                case CELL_KIND_TEXT: {
-                    const char *text = sv_take_first_n(cell->as.text.data, cell->as.text.count);
-                    printf("%-*s", PRINT_OFFSET, text);
+                case CELL_KIND_TEXT: 
+                    printn = printf(SV_Fmt, SV_Arg(cell->as.text));
                     break;
-                }
                 case CELL_KIND_NUMBER:
-                    printf("%-*lf", PRINT_OFFSET, cell->as.number);
+                    printn = printf("%lf", cell->as.number);
                     break;
                 case CELL_KIND_EXPR:
-                    printf("%-*lf", PRINT_OFFSET, cell->as.expr.value);
+                    printn = printf("%lf", cell->as.expr.value);
                     break;
                 case CELL_KIND_CLONE:
                     UNREACHABLE("Cell should never be a clone after evalution");
                     break;
+                default:
+                    UNREACHABLE("Unknown cell kind");
+                    break;
             }
+
+            assert(0 <= printn);
+            assert((size_t) printn <= col_widths[col]);
+            printf("%*s", (int) (col_widths[col] - printn), "");
 
             if(col < table.cols - 1) printf(" | ");
         }
@@ -984,6 +1040,7 @@ int main(int argc, char **argv)
         printf("\n");
     }
 
+    free(col_widths);
     free(content);
     free(table.cells);
     free(eb.items);

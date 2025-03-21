@@ -1,3 +1,11 @@
+/*
+ * Simple Spreadsheet Expression Parser
+ *
+ * This program implements a basic expression parsing system for a spreadsheet-like application.
+ * It supports operations such as numerical expressions, cell references, and addition operations.
+ * The program reads a CSV file containing expressions and parses them into an expression tree.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,46 +15,51 @@
 #define SV_IMPLEMENTATION
 #include "sv.h"
 
+// An "unreachable" macro for reporting unreachable locations of code
 #define UNREACHABLE(message)                         \
     do {                                             \
         fprintf(stderr, "%s:%d: UNREACHABLE: %s\n",  \
                 __FILE__, __LINE__, message);        \
-        exit(1);                                    \
+        exit(1);                                     \
     } while(0)
 
+// Forward declaration of the Expr structure
 typedef struct Expr Expr;
 typedef size_t Expr_Index;
 
 #define PRINT_OFFSET -20
 
+// Enum representing different kinds of expressions
 typedef enum {
-    EXPR_KIND_NUMBER = 0,
-    EXPR_KIND_CELL,
-    EXPR_KIND_BOP,
-    EXPR_KIND_UOP,
+    EXPR_KIND_NUMBER = 0, // Numeric constant
+    EXPR_KIND_CELL,       // Cell reference
+    EXPR_KIND_BOP,        // Binary operation
+    EXPR_KIND_UOP,        // Unary operation
 } Expr_Kind;
 
-
 typedef enum {
-    BOP_KIND_PLUS = 0,
-    BOP_KIND_MINUS,
-    BOP_KIND_MULT,
-    BOP_KIND_DIV,
-    COUNT_BOP_KINDS,
+    BOP_KIND_PLUS = 0,    // Plus BOP
+    BOP_KIND_MINUS,       // Minus BOP
+    BOP_KIND_MULT,        // Multiplication BOP
+    BOP_KIND_DIV,         // Division BOP
+    COUNT_BOP_KINDS,      // Number of binary operations
 } Bop_Kind;
 
+// Binary operation definitions
 typedef struct {
     Bop_Kind kind;
     String_View token;
     size_t precedence;
 } Bop_Def;
 
+// Precedence of binary operations
 typedef enum {
     BOP_PRECEDENCE0 = 0,
     BOP_PRECEDENCE1,
     COUNT_BOP_PRECEDENCE,
 } Bop_Precedence;
 
+// Table of binary operation definitions
 static_assert(COUNT_BOP_KINDS == 4, 
     "The amount of binary operators has changed. Please adjust the definition table accrodingly.\n");
 static const Bop_Def bop_defs[COUNT_BOP_KINDS] = {
@@ -72,6 +85,7 @@ static const Bop_Def bop_defs[COUNT_BOP_KINDS] = {
     }, 
 };
 
+// Determine binary operation's definition by token
 const Bop_Def *bop_def_by_token(String_View token)
 {
     for(Bop_Kind kind = 0; kind < COUNT_BOP_KINDS; ++kind) {
@@ -83,6 +97,7 @@ const Bop_Def *bop_def_by_token(String_View token)
     return NULL;
 }
 
+// Binary operation getter
 Bop_Def get_bop_def(Bop_Kind kind) 
 {
     assert(kind >= 0);
@@ -90,26 +105,31 @@ Bop_Def get_bop_def(Bop_Kind kind)
     return bop_defs[kind];
 }
 
+// Structure for representing a binary expression
 typedef struct {
-    Bop_Kind kind;
-    Expr_Index lhs;
-    Expr_Index rhs;
+    Bop_Kind kind;  // Kind of binary expression
+    Expr_Index lhs; // Left-hand side expression
+    Expr_Index rhs; // Right-hand side expression
 } Expr_Bop;
 
+// Unary operations' kinds
 typedef enum {
     UOP_KIND_MINUS,
 } Uop_Kind;
 
+// Unary expression structure
 typedef struct {
     Uop_Kind kind;
     Expr_Index param;
 } Expr_Uop;
 
+// Structure representing a cell index in the spreadsheet
 typedef struct {
     size_t row;
     size_t col;
 } Cell_Index;
 
+// Union storing different types of expressions
 typedef union {
     double number;
     Cell_Index cell;
@@ -117,20 +137,29 @@ typedef union {
     Expr_Uop uop;
 } Expr_As;
 
+// Structure representing an expression
 struct Expr {
-    Expr_Kind kind;
-    Expr_As as;
-    const char *file_path;
-    size_t file_row;
-    size_t file_col;
+    Expr_Kind kind;  // Type of the expression
+    Expr_As as;      // Expression data
+    const char *file_path; // File path for error tracking
+    size_t file_row; // Row in the source file
+    size_t file_col; // Column in the source file
 };
 
+// Buffer to store and manage expressions dynamically
 typedef struct {
-    size_t count;
-    size_t capacity;
-    Expr *items;
+    size_t count;    // Number of expressions stored
+    size_t capacity; // Total capacity of the buffer
+    Expr *items;     // Array of expressions
 } Expr_Buffer;
 
+/**
+ * Allocates a new expression in the buffer.
+ * Dynamically resizes the buffer if necessary.
+ * 
+ * @param eb Pointer to the expression buffer.
+ * @return The index of the newly allocated expression.
+ */
 Expr_Index expr_buffer_alloc(Expr_Buffer *eb) 
 {
     if(eb->count >= eb->capacity) {
@@ -148,12 +177,26 @@ Expr_Index expr_buffer_alloc(Expr_Buffer *eb)
     return eb->count++;
 }
 
+/**
+ * Retrieves an expression from the buffer at a given index.
+ *
+ * @param eb Pointer to the expression buffer.
+ * @param index Index of the expression to retrieve.
+ * @return Pointer to the requested expression.
+ */
 Expr *expr_buffer_at(Expr_Buffer *eb, Expr_Index index) 
 {
     assert(index < eb->count);
     return &eb->items[index];
 }
 
+/**
+ * Dumps the expression buffer to a file.
+ *
+ * @param stream Output file stream.
+ * @param eb Pointer to the expression buffer.
+ * @param root Root index of the expression tree.
+ */
 void expr_buffer_dump(FILE *stream, const Expr_Buffer *eb, Expr_Index root) 
 {
     fwrite(&root, sizeof(root), 1, stream);
@@ -161,11 +204,12 @@ void expr_buffer_dump(FILE *stream, const Expr_Buffer *eb, Expr_Index root)
     fwrite(eb->items, sizeof(Expr), eb->count, stream);
 }
 
+// Enums defining spreadsheet cell types and evaluation status
 typedef enum {
-    DIR_LEFT = 0,
-    DIR_RIGHT,
-    DIR_UP,
-    DIR_DOWN,
+    DIR_LEFT = 0, // Direction left
+    DIR_RIGHT,    // Direction right
+    DIR_UP,       // Direction up
+    DIR_DOWN,     // Direction down
 } Dir;
 
 typedef enum {
@@ -175,6 +219,12 @@ typedef enum {
     CELL_KIND_CLONE,
 } Cell_Kind;
 
+/**
+ * Prints the kind of a cell as a string.
+ *
+ * @param kind The cell kind enum.
+ * @return A string representation of the cell kind.
+ */
 const char *cell_kind_as_cstr(Cell_Kind kind) 
 {
     switch (kind)
@@ -210,6 +260,7 @@ typedef union {
     Dir clone;
 } Cell_As;
 
+// Structure representing a spreadsheet cell
 typedef struct {
     Cell_Kind kind;
     Cell_As as;
@@ -219,6 +270,7 @@ typedef struct {
     size_t file_col;
 } Cell;
 
+// Table structure representing the spreadsheet
 typedef struct {
     Cell *cells;
     size_t rows;
@@ -226,6 +278,13 @@ typedef struct {
     const char *file_path;
 } Table;
 
+/**
+ * Checks if a character is valid for a name.
+ * Valid characters are alphanumeric or underscore.
+ * 
+ * @param c Character to check.
+ * @return true if the character is valid for a name, false otherwise.
+ */
 bool is_name(char c) 
 {
     return isalnum(c) || c == '_';
@@ -245,14 +304,35 @@ typedef struct {
     const char *line_start;
 } Lexer;
 
+/**
+ * Gets the current column position within the file for the lexer.
+ * Calculated as the offset from the start of the current line.
+ * 
+ * @param lexer Pointer to the lexer structure.
+ * @return The current column position (1-based indexing).
+ */
 size_t lexer_file_col(const Lexer *lexer) {
     return lexer->source.data - lexer->line_start + 1;
 }
 
+/**
+ * Prints the current location of the lexer in the format "file:row:col: ".
+ * Used for error reporting.
+ * 
+ * @param lexer Pointer to the lexer structure.
+ * @param stream Output file stream.
+ */
 void lexer_print_loc(const Lexer *lexer, FILE *stream) {
     fprintf(stream, "%s:%zu:%zu: ", lexer->file_path, lexer->file_row, lexer_file_col(lexer));
 }
 
+/**
+ * Copies the next token from the lexer's source.
+ * Handles operators, identifiers, and reports errors for unknown tokens.
+ * 
+ * @param lexer Pointer to the lexer structure.
+ * @return The copied token.
+ */
 Token lexer_peek_token(Lexer *lexer)
 {
     lexer->source = sv_trim(lexer->source);
@@ -291,6 +371,13 @@ Token lexer_peek_token(Lexer *lexer)
     exit(1);
 }
 
+/**
+ * Extracts the next token from the lexer's source.
+ * Handles operators, identifiers, and reports errors for unknown tokens.
+ * 
+ * @param lexer Pointer to the lexer structure.
+ * @return The extracted token.
+ */
 Token lexer_next_token(Lexer *lexer)
 {
     Token token = lexer_peek_token(lexer);
@@ -315,6 +402,15 @@ typedef struct {
     char *cstr;
 } Tmp_Cstr;
 
+/**
+ * Fills a temporary C-string with the provided data.
+ * Ensures the buffer is large enough and null-terminates the string.
+ * 
+ * @param tc Pointer to the temporary C-string structure.
+ * @param data Pointer to the data to copy.
+ * @param data_size Size of the data to copy.
+ * @return Pointer to the filled C-string.
+ */
 char *tmp_cstr_fill(Tmp_Cstr *tc, const char *data, size_t data_size) 
 {
     if(data_size + 1 >= tc->capacity) {
@@ -327,6 +423,15 @@ char *tmp_cstr_fill(Tmp_Cstr *tc, const char *data, size_t data_size)
     return tc->cstr;
 }
 
+/**
+ * Converts a String_View to a double.
+ * Creates a temporary null-terminated string and uses strtod for conversion.
+ * 
+ * @param sv The String_View to convert.
+ * @param tc Pointer to a temporary C-string structure.
+ * @param out Pointer to store the resulting double value.
+ * @return true if conversion succeeded, false otherwise.
+ */
 bool sv_strtod(String_View sv, Tmp_Cstr *tc, double *out)
 {
     char *ptr = tmp_cstr_fill(tc, sv.data, sv.count);
@@ -336,6 +441,15 @@ bool sv_strtod(String_View sv, Tmp_Cstr *tc, double *out)
     return endptr != ptr && *endptr == '\0';
 }
 
+/**
+ * Converts a String_View to a long integer.
+ * Creates a temporary null-terminated string and uses strtol for conversion.
+ * 
+ * @param sv The String_View to convert.
+ * @param tc Pointer to a temporary C-string structure.
+ * @param out Pointer to store the resulting long integer value.
+ * @return true if conversion succeeded, false otherwise.
+ */
 bool sv_strtol(String_View sv, Tmp_Cstr *tc, long int *out)
 {
     char *ptr = tmp_cstr_fill(tc, sv.data, sv.count);
@@ -347,6 +461,15 @@ bool sv_strtol(String_View sv, Tmp_Cstr *tc, long int *out)
 
 Expr_Index parse_expr(Lexer *lexer, Tmp_Cstr *tc, Expr_Buffer *eb);
 
+/**
+ * Parses a primary expression (number or cell reference).
+ * Handles the most basic elements of expressions.
+ * 
+ * @param lexer Pointer to the lexer structure.
+ * @param tc Pointer to a temporary C-string structure.
+ * @param eb Pointer to the expression buffer.
+ * @return Index of the parsed primary expression.
+ */
 Expr_Index parse_primary_expr(Lexer *lexer, Tmp_Cstr *tc, Expr_Buffer *eb) 
 {
     Token token = lexer_next_token(lexer);
@@ -421,6 +544,17 @@ Expr_Index parse_primary_expr(Lexer *lexer, Tmp_Cstr *tc, Expr_Buffer *eb)
     }
 }
 
+
+/**
+ * Parses an binary operation expression.
+ * Handles expressions with addition operators, recursively parsing the right-hand side.
+ * 
+ * @param lexer Pointer to the lexer structure.
+ * @param tc Pointer to a temporary C-string structure.
+ * @param eb Pointer to the expression buffer.
+ * @param precedence Current precedence of the expression
+ * @return Index of the parsed addition expression or primary expression.
+ */
 Expr_Index parse_bop_expr(Lexer *lexer, Tmp_Cstr *tc, Expr_Buffer *eb, size_t precedence)
 {
     if (precedence >= COUNT_BOP_PRECEDENCE) {
@@ -454,7 +588,14 @@ Expr_Index parse_bop_expr(Lexer *lexer, Tmp_Cstr *tc, Expr_Buffer *eb, size_t pr
     return lhs_index;
 }
 
-
+/**
+ * Retrieves a cell from the table at a given index.
+ * Verifies the index is within bounds before returning.
+ *
+ * @param table Pointer to the table structure.
+ * @param index Index of the cell to retrieve.
+ * @return Pointer to the requested cell.
+ */
 Cell *table_cell_at(Table *table, Cell_Index index) 
 {
     assert(index.row < table->rows);
@@ -463,6 +604,13 @@ Cell *table_cell_at(Table *table, Cell_Index index)
     return &table->cells[index.row * table->cols + index.col];
 }
 
+/**
+ * Dumps the table contents to an output stream.
+ * Prints each cell's file location and kind.
+ *
+ * @param stream Output file stream.
+ * @param table Pointer to the table structure.
+ */
 void dump_table(FILE *stream, Table *table) 
 {
     for(size_t row = 0; row < table->rows; ++row) {
@@ -478,6 +626,15 @@ void dump_table(FILE *stream, Table *table)
     }
 }
 
+/**
+ * Recursively prints an expression tree.
+ * Output is indented based on the tree depth to show structure.
+ *
+ * @param stream Output file stream.
+ * @param eb Pointer to the expression buffer.
+ * @param expr_index Index of the expression to dump.
+ * @param level Current nesting level (for indentation).
+ */
 void dump_expr(FILE *stream, Expr_Buffer *eb, Expr_Index expr_index, int level) 
 {
     fprintf(stream, "%*s", level * 2, "");
@@ -531,16 +688,39 @@ void dump_expr(FILE *stream, Expr_Buffer *eb, Expr_Index expr_index, int level)
     }
 }
 
+/**
+ * Parses an expression from the given lexer.
+ * This is the entry point for expression parsing.
+ *
+ * @param lexer Pointer to the lexer structure.
+ * @param tc Pointer to a temporary C-string structure.
+ * @param eb Pointer to the expression buffer.
+ * @return Index of the parsed expression.
+ */
 Expr_Index parse_expr(Lexer *lexer, Tmp_Cstr *tc, Expr_Buffer *eb) 
 {
     return parse_bop_expr(lexer, tc, eb, BOP_PRECEDENCE0);
 }
 
+/**
+ * Prints usage information for the program.
+ * Displays the correct command-line syntax.
+ *
+ * @param stream Output file stream.
+ */
 void print_usage(FILE *stream) 
 {
     fprintf(stream, "Usage: ./excel-cli <input.csv>\n");
 }
 
+/**
+ * Reads the contents of a CSV file into memory.
+ * Allocates memory for the file contents and reads the entire file.
+ *
+ * @param file_path Path to the CSV file.
+ * @param size Pointer to store the size of the file.
+ * @return Pointer to the allocated buffer containing the file contents, or NULL on error.
+ */
 char *read_csv(const char *file_path, size_t *size) 
 {
 
@@ -579,6 +759,15 @@ error:
     return NULL;
 }
 
+/**
+ * Parses table content from a String_View into the table structure.
+ * Processes each cell in the table and sets up appropriate expressions and references.
+ *
+ * @param table Pointer to the table structure.
+ * @param eb Pointer to the expression buffer.
+ * @param tc Pointer to a temporary C-string structure.
+ * @param content String_View containing the CSV content.
+ */
 void parse_table_from_content(Table *table, Expr_Buffer *eb, Tmp_Cstr *tc, String_View content)
 {
     for (size_t row = 0; row < table->rows; ++row) {
@@ -634,6 +823,14 @@ void parse_table_from_content(Table *table, Expr_Buffer *eb, Tmp_Cstr *tc, Strin
     }
 }
 
+/**
+ * Estimates the size of a table from its content.
+ * Counts the number of rows and maximum number of columns.
+ *
+ * @param content String_View containing the CSV content.
+ * @param out_rows Pointer to store the number of rows.
+ * @param out_cols Pointer to store the number of columns.
+ */
 void estimate_table_size(String_View content, size_t *out_rows, size_t *out_cols) 
 {
     size_t rows = 0;
@@ -657,6 +854,15 @@ void estimate_table_size(String_View content, size_t *out_rows, size_t *out_cols
 
 void table_eval_cell(Table *table, Expr_Buffer *eb, Cell_Index cell_index);
 
+/**
+ * Evaluates an expression in the context of a table.
+ * Handles numeric values, cell references, and addition operations.
+ *
+ * @param table Pointer to the table structure.
+ * @param eb Pointer to the expression buffer.
+ * @param expr_index Index of the expression to evaluate.
+ * @return The numeric result of evaluating the expression.
+ */
 double table_eval_expr(Table *table, Expr_Buffer *eb, Expr_Index expr_index) 
 {
     Expr *expr = expr_buffer_at(eb, expr_index);
@@ -715,6 +921,13 @@ double table_eval_expr(Table *table, Expr_Buffer *eb, Expr_Index expr_index)
     return 0;
 }
 
+/**
+ * Returns the opposite direction.
+ * LEFT <-> RIGHT, UP <-> DOWN
+ *
+ * @param dir The direction to reverse.
+ * @return The opposite direction.
+ */
 Dir opposite_dir(Dir dir) 
 {
     switch(dir) {
@@ -728,6 +941,13 @@ Dir opposite_dir(Dir dir)
     }
 }
 
+/**
+ * Returns the cell index of a neighboring cell in the specified direction.
+ *
+ * @param index The starting cell index.
+ * @param dir The direction to move.
+ * @return The new cell index.
+ */
 Cell_Index nbor_in_dir(Cell_Index index, Dir dir) 
 {
     switch(dir) {
@@ -751,6 +971,17 @@ Cell_Index nbor_in_dir(Cell_Index index, Dir dir)
     return index;
 }
 
+/**
+ * Moves an expression in a specified direction.
+ * Creates a new expression with adjusted cell references.
+ *
+ * @param table Pointer to the table structure.
+ * @param cell_index Index of the current cell.
+ * @param eb Pointer to the expression buffer.
+ * @param root Index of the root expression to move.
+ * @param dir Direction to move the expression.
+ * @return Index of the new, moved expression.
+ */
 Expr_Index move_expr_in_dir(Table *table, Cell_Index cell_index, Expr_Buffer *eb, Expr_Index root, Dir dir) 
 {
     Cell *cell = table_cell_at(table, cell_index);
@@ -823,6 +1054,15 @@ Expr_Index move_expr_in_dir(Table *table, Cell_Index cell_index, Expr_Buffer *eb
     }
 }
 
+/**
+ * Evaluates a cell in the table.
+ * Handles different cell types and their evaluation rules.
+ * Detects circular dependencies.
+ *
+ * @param table Pointer to the table structure.
+ * @param eb Pointer to the expression buffer.
+ * @param cell_index Index of the cell to evaluate.
+ */
 void table_eval_cell(Table *table, Expr_Buffer *eb, Cell_Index cell_index) 
 {
     Cell *cell = table_cell_at(table, cell_index);
@@ -882,6 +1122,14 @@ void table_eval_cell(Table *table, Expr_Buffer *eb, Cell_Index cell_index)
     }
 }
 
+/**
+ * Takes the first n characters from a string and returns them as a new null-terminated string.
+ * Helper function for displaying text values.
+ *
+ * @param input The input string.
+ * @param count Number of characters to take.
+ * @return A newly allocated string containing the first n characters of input, or NULL on error.
+ */
 const char* sv_take_first_n(const char* input, size_t count) {
     if (input == NULL) {
         return NULL;
@@ -907,6 +1155,15 @@ const char* sv_take_first_n(const char* input, size_t count) {
     return result;
 }
 
+/**
+ * Main function for the spreadsheet program.
+ * Parses command-line arguments, reads the input file, processes the spreadsheet,
+ * evaluates all cells, and outputs the results.
+ *
+ * @param argc Number of command-line arguments.
+ * @param argv Array of command-line argument strings.
+ * @return 0 on success, non-zero on error.
+ */
 int main(int argc, char **argv) 
 {
     if(argc < 2) {

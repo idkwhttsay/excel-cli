@@ -250,7 +250,13 @@ Token lexer_peek_token(Lexer *lexer)
         return token;
     }
 
-    if (*lexer->source.data == '+' || *lexer->source.data == '-' || *lexer->source.data == '*' || *lexer->source.data == '/') {
+    if (*lexer->source.data == '+' || 
+        *lexer->source.data == '-' || 
+        *lexer->source.data == '*' || 
+        *lexer->source.data == '/' ||
+        *lexer->source.data == '(' ||
+        *lexer->source.data == ')'
+    ) {
         token.text = (String_View) {
             .count = 1,
             .data = lexer->source.data
@@ -322,6 +328,8 @@ bool sv_strtol(String_View sv, Tmp_Cstr *tc, long int *out)
     return endptr != ptr && *endptr == '\0';
 }
 
+Expr_Index parse_expr(Lexer *lexer, Tmp_Cstr *tc, Expr_Buffer *eb);
+
 Expr_Index parse_primary_expr(Lexer *lexer, Tmp_Cstr *tc, Expr_Buffer *eb) 
 {
     Token token = lexer_next_token(lexer);
@@ -332,15 +340,33 @@ Expr_Index parse_primary_expr(Lexer *lexer, Tmp_Cstr *tc, Expr_Buffer *eb)
         exit(1);
     }
 
-    Expr_Index expr_index = expr_buffer_alloc(eb);
-    Expr *expr = expr_buffer_at(eb, expr_index);
-    expr->file_path = token.file_path;
-    expr->file_row = token.file_row;
-    expr->file_col = token.file_col;
+    double number = 0.0;
 
-    if (sv_strtod(token.text, tc, &expr->as.number)) {
+    if (sv_strtod(token.text, tc, &number)) {
+        Expr_Index expr_index = expr_buffer_alloc(eb);
+        Expr *expr = expr_buffer_at(eb, expr_index);
         expr->kind = EXPR_KIND_NUMBER;
+        expr->as.number = number;
+        expr->file_path = token.file_path;
+        expr->file_row = token.file_row;
+        expr->file_col = token.file_col;
+        return expr_index;
+    } else if(sv_eq(token.text, SV("("))) {
+        Expr_Index expr_index = parse_expr(lexer, tc, eb);
+        token = lexer_next_token(lexer);
+        if(!sv_eq(token.text, SV(")"))) {
+            fprintf(stderr, "%s:%zu:%zu: ERROR: expected token ')' but got '"SV_Fmt"'\n", 
+                token.file_path, token.file_row, token.file_col, SV_Arg(token.text));
+            exit(1);
+        }
+
+        return expr_index;
     } else {
+        Expr_Index expr_index = expr_buffer_alloc(eb);
+        Expr *expr = expr_buffer_at(eb, expr_index);
+        expr->file_path = token.file_path;
+        expr->file_row = token.file_row;
+        expr->file_col = token.file_col;
         expr->kind = EXPR_KIND_CELL;
 
         if (!isupper(*token.text.data)) {
@@ -361,9 +387,8 @@ Expr_Index parse_primary_expr(Lexer *lexer, Tmp_Cstr *tc, Expr_Buffer *eb)
         }
 
         expr->as.cell.row = (size_t) row;
+        return expr_index;
     }
-
-    return expr_index;
 }
 
 Expr_Index parse_bop_expr(Lexer *lexer, Tmp_Cstr *tc, Expr_Buffer *eb, size_t precedence)
@@ -820,7 +845,7 @@ const char* sv_take_first_n(const char* input, size_t count) {
 
 int main1(void) {
     size_t source_line = __LINE__ + 1;
-    String_View source = SV_STATIC("2*3 + 1");
+    String_View source = SV_STATIC("2*(3+1)");
     
     Lexer lexer = {
         .source = source,

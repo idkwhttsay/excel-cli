@@ -710,7 +710,7 @@ Expr_Index parse_expr(Lexer *lexer, Tmp_Cstr *tc, Expr_Buffer *eb)
  */
 void print_usage(FILE *stream) 
 {
-    fprintf(stream, "Usage: ./excel-cli <input.csv>\n");
+    fprintf(stream, "Usage: ./excel-cli <input.csv> <output.csv>\n");
 }
 
 /**
@@ -1166,19 +1166,26 @@ const char* sv_take_first_n(const char* input, size_t count) {
  */
 int main(int argc, char **argv) 
 {
-    if(argc < 2) {
+    if(argc < 3) {
         print_usage(stderr);
-        fprintf(stderr, "ERROR: input file is not provided\n");
+        fprintf(stderr, "ERROR: input or output files are not provided\n");
         exit(1);
     }
 
     const char *input_file_path = argv[1];
+    const char *output_file_path = argv[2];
 
     size_t content_size = 0;
     char *content = read_csv(input_file_path, &content_size);
 
     if(content == NULL) {
         fprintf(stderr, "ERROR: could not read file %s: %s\n", input_file_path, strerror(errno));
+        exit(1);
+    }
+
+    FILE *out_file = fopen(output_file_path, "w");
+    if (out_file == NULL) {
+        fprintf(stderr, "ERROR: could not write to file %s: %s\n", output_file_path, strerror(errno));
         exit(1);
     }
 
@@ -1227,28 +1234,22 @@ int main(int argc, char **argv)
                 case CELL_KIND_TEXT:
                     width = cell->as.text.count;
                     break;
-
                 case CELL_KIND_NUMBER: {
                     int n = snprintf(NULL, 0, "%lf", cell->as.number);
                     assert(n >= 0);
                     width = (size_t) n;
-                }
-                break;
-
+                } break;
                 case CELL_KIND_EXPR: {
                     int n = snprintf(NULL, 0, "%lf", cell->as.expr.value);
                     assert(n >= 0);
                     width = (size_t) n;
-                }
-                break;
-
+                } break;
                 case CELL_KIND_CLONE:
-                    assert(0 && "unreachable: cell should never be a clone after the evaluation");
-                    exit(69);
-
+                    UNREACHABLE("Cell should never be a clone after the evaluation");
+                    break;
                 default:
-                    assert(0 && "unreachable");
-                    exit(69);
+                    UNREACHABLE("");
+                    break;
                 }
 
                 if (col_widths[col] < width) {
@@ -1271,13 +1272,13 @@ int main(int argc, char **argv)
 
             switch(cell->kind) {
                 case CELL_KIND_TEXT: 
-                    printn = printf(SV_Fmt, SV_Arg(cell->as.text));
+                    printn = fprintf(out_file, SV_Fmt, SV_Arg(cell->as.text));
                     break;
                 case CELL_KIND_NUMBER:
-                    printn = printf("%lf", cell->as.number);
+                    printn = fprintf(out_file, "%lf", cell->as.number);
                     break;
                 case CELL_KIND_EXPR:
-                    printn = printf("%lf", cell->as.expr.value);
+                    printn = fprintf(out_file, "%lf", cell->as.expr.value);
                     break;
                 case CELL_KIND_CLONE:
                     UNREACHABLE("Cell should never be a clone after evalution");
@@ -1289,12 +1290,12 @@ int main(int argc, char **argv)
 
             assert(0 <= printn);
             assert((size_t) printn <= col_widths[col]);
-            printf("%*s", (int) (col_widths[col] - printn), "");
+            fprintf(out_file, "%*s", (int) (col_widths[col] - printn), "");
 
-            if(col < table.cols - 1) printf(" | ");
+            if(col < table.cols - 1) fprintf(out_file, " | ");
         }
 
-        printf("\n");
+        fprintf(out_file, "\n");
     }
 
     free(col_widths);

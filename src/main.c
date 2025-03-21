@@ -7,6 +7,13 @@
 #define SV_IMPLEMENTATION
 #include "sv.h"
 
+#define UNREACHABLE(message)                         \
+    do {                                             \
+        fprintf(stderr, "%s:%d: UNREACHABLE: %s\n",  \
+                __FILE__, __LINE__, message);        \
+        exit(1);                                    \
+    } while(0)
+
 typedef struct Expr Expr;
 typedef size_t Expr_Index;
 
@@ -181,8 +188,7 @@ const char *cell_kind_as_cstr(Cell_Kind kind)
         case CELL_KIND_CLONE:
             return "CLONE";
         default:
-            assert(0 && "unreacheble");
-            exit(1);
+            UNREACHABLE("Unknown cell kind");
     }
 }
 
@@ -491,8 +497,7 @@ void dump_expr(FILE *stream, Expr_Buffer *eb, Expr_Index expr_index, int level)
                     fprintf(stream, "UOP(MINUS): \n");
                     break;
                 default:
-                    assert(0 && "unreachable");
-                    exit(1);
+                    UNREACHABLE("Unknown unary operator kind");
             }
 
             dump_expr(stream, eb, expr->as.uop.param, level + 1);
@@ -513,8 +518,7 @@ void dump_expr(FILE *stream, Expr_Buffer *eb, Expr_Index expr_index, int level)
                     break;
                 case COUNT_BOP_KINDS:
                 default: {
-                    assert(0 && "unreachable: your memory is probably corrupted somewhere");
-                    exit(1);
+                    UNREACHABLE("Unknown binary operator kind");
                 }
             }
 
@@ -522,8 +526,7 @@ void dump_expr(FILE *stream, Expr_Buffer *eb, Expr_Index expr_index, int level)
             dump_expr(stream, eb, expr->as.bop.rhs, level + 1);
             break;
         default: {
-            assert(0 && "unreachable: your memory is probably corrupted somewhere");
-            exit(1);
+            UNREACHABLE("Unknown expression kind");
         }
     }
 }
@@ -679,7 +682,7 @@ double table_eval_expr(Table *table, Expr_Buffer *eb, Expr_Index expr_index)
                     return target_cell->as.expr.value;
                 } break;
                 case CELL_KIND_CLONE: {
-                    assert(0 && "unreacheable");
+                    UNREACHABLE("Clone cell should be evaluated to the expression cell at this point");
                 } break; 
             }
         } break;
@@ -694,8 +697,7 @@ double table_eval_expr(Table *table, Expr_Buffer *eb, Expr_Index expr_index)
                 case BOP_KIND_DIV: return lhs / rhs;
                 case COUNT_BOP_KINDS:
                 default: {
-                    assert(0 && "unreachable");
-                    exit(1);
+                    UNREACHABLE("Unknown binary operator kind");
                 }
             }
         } break;
@@ -705,8 +707,7 @@ double table_eval_expr(Table *table, Expr_Buffer *eb, Expr_Index expr_index)
                 case UOP_KIND_MINUS:
                     return -param;
                 default:
-                    assert(0 && "unreachable");
-                    exit(1);
+                UNREACHABLE("Unknown unary operator kind");
             }
         }
     }
@@ -722,8 +723,7 @@ Dir opposite_dir(Dir dir)
         case DIR_UP: return DIR_DOWN;
         case DIR_DOWN: return DIR_UP;
         default: {
-            assert(0 && "unreachable: your memory is probably corrupted!\n");
-            exit(1);
+            UNREACHABLE("Unknown direction");
         }
     }
 }
@@ -744,8 +744,7 @@ Cell_Index nbor_in_dir(Cell_Index index, Dir dir)
             index.row ++;
             break;
         default: {
-            assert(0 && "unreachable: your memory is probably corrupted!\n");
-            exit(1);
+            UNREACHABLE("Unknown direction");
         }
     }
 
@@ -819,8 +818,7 @@ Expr_Index move_expr_in_dir(Table *table, Cell_Index cell_index, Expr_Buffer *eb
             return new_index;
         } break;
         default: {
-            assert(0 && "unreachable: your memory is probably corrupted somewhere");
-            exit(1);
+            UNREACHABLE("Unknown expression kind");
         }
     }
 }
@@ -877,7 +875,7 @@ void table_eval_cell(Table *table, Expr_Buffer *eb, Cell_Index cell_index)
 
                 cell->status = EVALUATED;
             } else {
-                assert(0 && "unreachable: evaluated cloens are an absurd. When a clone cell is evaluated it becomes its neighbor kind");
+               UNREACHABLE("Evaluated cloens are an absurd. When a clone cell is evaluated it becomes its neighbor kind");
                 exit(1);
             }
         } break;
@@ -976,7 +974,7 @@ int main(int argc, char **argv)
                     printf("%-*lf", PRINT_OFFSET, cell->as.expr.value);
                     break;
                 case CELL_KIND_CLONE:
-                    assert(0 && "unreachable: cell should never be a clone after evalution");
+                    UNREACHABLE("Cell should never be a clone after evalution");
                     break;
             }
 

@@ -9,7 +9,8 @@
 
 #define CFLAGS "-Wall", "-Wextra", "-Wswitch-enum", "-std=c11", "-pedantic", "-ggdb"
 // #define RUN_FILE "csv/stress-copy.csv"
-#define RUN_FILE "csv/ops.csv"
+// #define RUN_FILE "csv/ops.csv"
+#define RUN_FILE "csv/bills.csv"
 // #define RUN_FILE "csv/input.csv"
 
 #ifdef _WIN32

@@ -11,6 +11,7 @@
 #include <string.h>
 #include <errno.h>
 #include <assert.h>
+#include <time.h>
 
 #define SV_IMPLEMENTATION
 #include "sv.h"
@@ -1197,6 +1198,8 @@ const char* sv_take_first_n(const char* input, size_t count) {
  */
 int main(int argc, char **argv) 
 {
+    clock_t start_time = clock();
+
     if(argc < 3) {
         print_usage(stderr);
         fprintf(stderr, "ERROR: input or output files are not provided\n");
@@ -1334,6 +1337,9 @@ int main(int argc, char **argv)
     free(table.cells);
     free(eb.items);
     free(tc.cstr);
+
+    double elapsed_time = (double)(clock() - start_time) / CLOCKS_PER_SEC;
+    printf("Done in %f seconds\n", elapsed_time);
 
     return 0;
 }

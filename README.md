@@ -59,3 +59,14 @@ $ ./nob run
 | Number     | Anything that can be parsed as a double by [strtod](https://en.cppreference.com/w/c/string/byte/strtof)                                                                | `1`, `2.0`, `1e-6`, etc           |
 | Expression | Always starts with `=`. Excel style math expression that involves numbers, binary operations, unary operations, and other cells.                         | `=A1+B1`, `=1+2`, `=A1+100` etc |
 | Clone      | Always starts with `:`. Clones a neighbor cell in a particular direction denoted by characters `<`, `>`, `v`, `^`. | `:<`, `:>`, `:v`, `:^`             |
+
+
+## Benchmark
+
+Benchmark test was performed on the table of a size (8600 X 20) full of clone operations. You can find this table in the "input/large.csv".
+
+```console
+[INFO] CMD: cc -Wall -Wextra -Wswitch-enum -std=c11 -pedantic -ggdb -o excel-cli src/main.c
+[INFO] CMD: ./excel-cli input/large.csv out/out.csv
+Done in 0.254175 seconds
+```

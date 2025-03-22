@@ -297,6 +297,13 @@ bool is_name(char c)
     return isalnum(c) || c == '_';
 }
 
+/**
+ * Calcualtes the number in the power of n
+ * 
+ * @param n the power
+ * @param num number which will be exponetiated 
+ * @return number in the power of n
+ */
 double bin_pow(double num, int n) 
 {
     if(n == 0) return 1.0;

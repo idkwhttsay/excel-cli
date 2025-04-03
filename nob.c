@@ -10,9 +10,11 @@
 #define CFLAGS "-Wall", "-Wextra", "-Wswitch-enum", "-std=c11", "-pedantic", "-ggdb"
 
 // #define IN_FILE "input/stress-copy.csv"
-#define IN_FILE "input/large.csv"
+// #define IN_FILE "input/large.csv"
+// #define IN_FILE "input/funcs.csv"
 // #define IN_FILE "input/ops.csv"
-// #define IN_FILE "input/bills.csv"
+#define IN_FILE "input/bills.csv"
+// #define IN_FILE "input/mod.csv"
 // #define IN_FILE "input/input.csv"
 
 #define OUT_FILE "out/out.csv"

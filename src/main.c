@@ -44,6 +44,7 @@ typedef enum {
     BOP_KIND_MULT,        // Multiplication BOP
     BOP_KIND_DIV,         // Division BOP
     BOP_KIND_POW,         // Power BOP
+    BOP_KIND_MOD,
     COUNT_BOP_KINDS,      // Number of binary operations
 } Bop_Kind;
 
@@ -62,7 +63,7 @@ typedef enum {
 } Bop_Precedence;
 
 // Table of binary operation definitions
-static_assert(COUNT_BOP_KINDS == 5, 
+static_assert(COUNT_BOP_KINDS == 6, 
     "The amount of binary operators has changed. Please adjust the definition table accrodingly.\n");
 static const Bop_Def bop_defs[COUNT_BOP_KINDS] = 
 {
@@ -90,6 +91,11 @@ static const Bop_Def bop_defs[COUNT_BOP_KINDS] =
         .kind = BOP_KIND_POW,
         .token = SV_STATIC("^"),
         .precedence = BOP_PRECEDENCE1,
+    },
+    [BOP_KIND_MOD] = {
+        .kind = BOP_KIND_MOD,
+        .token = SV_STATIC("%"),
+        .precedence = BOP_PRECEDENCE0,
     },
 };
 
@@ -380,7 +386,8 @@ Token lexer_peek_token(Lexer *lexer)
         *lexer->source.data == '/' ||
         *lexer->source.data == '(' ||
         *lexer->source.data == ')' ||
-        *lexer->source.data == '^'
+        *lexer->source.data == '^' ||
+        *lexer->source.data == '%'
     ) {
         token.text = (String_View) {
             .count = 1,
@@ -704,6 +711,9 @@ void dump_expr(FILE *stream, Expr_Buffer *eb, Expr_Index expr_index, int level)
                 case BOP_KIND_POW:
                     fprintf(stream, "BOP(POW): \n");
                     break;
+                case BOP_KIND_MOD:
+                    fprintf(stream, "BOP(MOD): \n");
+                    break;
                 case COUNT_BOP_KINDS:
                 default: {
                     UNREACHABLE("Unknown binary operator kind");
@@ -933,6 +943,7 @@ double table_eval_expr(Table *table, Expr_Buffer *eb, Expr_Index expr_index)
                 case BOP_KIND_MULT: return lhs * rhs;
                 case BOP_KIND_DIV: return lhs / rhs;
                 case BOP_KIND_POW: return bin_pow(lhs, (int) rhs);
+                case BOP_KIND_MOD: return (int)lhs % (int)rhs;
                 case COUNT_BOP_KINDS:
                 default: {
                     UNREACHABLE("Unknown binary operator kind");

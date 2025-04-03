@@ -64,7 +64,7 @@ typedef enum {
 
 // Table of binary operation definitions
 static_assert(COUNT_BOP_KINDS == 6, 
-    "The amount of binary operators has changed. Please adjust the definition table accrodingly.\n");
+    "The amount of binary operators has changed. Please adjust the definition table accordingly.\n");
 static const Bop_Def bop_defs[COUNT_BOP_KINDS] = 
 {
     [BOP_KIND_PLUS] = {
@@ -1234,6 +1234,13 @@ int main(int argc, char **argv)
         exit(1);
     }
 
+    char *dump_file_path = "out/dump.bin";
+    FILE *dump_file = fopen(dump_file_path, "w");
+    if(dump_file == NULL) {
+        fprintf(stderr, "ERROR: could not write to file %s: %s\n", dump_file_path, strerror(errno));
+        exit(1);
+    }
+
     String_View input = {
         .count = content_size,
         .data = content,
@@ -1318,12 +1325,15 @@ int main(int argc, char **argv)
             switch(cell->kind) {
                 case CELL_KIND_TEXT: 
                     printn = fprintf(out_file, SV_Fmt, SV_Arg(cell->as.text));
+                    fprintf(stdout, SV_Fmt, SV_Arg(cell->as.text));
                     break;
                 case CELL_KIND_NUMBER:
                     printn = fprintf(out_file, "%lf", cell->as.number);
+                    fprintf(stdout, "%lf", cell->as.number);
                     break;
                 case CELL_KIND_EXPR:
                     printn = fprintf(out_file, "%lf", cell->as.expr.value);
+                    fprintf(stdout, "%lf", cell->as.expr.value);
                     break;
                 case CELL_KIND_CLONE:
                     UNREACHABLE("Cell should never be a clone after evalution");
@@ -1336,12 +1346,21 @@ int main(int argc, char **argv)
             assert(0 <= printn);
             assert((size_t) printn <= col_widths[col]);
             fprintf(out_file, "%*s", (int) (col_widths[col] - printn), "");
+            fprintf(stdout, "%*s", (int) (col_widths[col] - printn), "");
 
-            if(col < table.cols - 1) fprintf(out_file, " | ");
+            if(col < table.cols - 1) {
+                fprintf(out_file, " | ");
+                fprintf(stdout, " | ");
+            }
         }
 
         fprintf(out_file, "\n");
+        fprintf(stdout, "\n");
     }
+
+
+    // Dump a table into a binary for the future
+    expr_buffer_dump(dump_file, &eb, 0);
 
     free(col_widths);
     free(content);

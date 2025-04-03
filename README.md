@@ -55,9 +55,9 @@ $ ./nob run
 
 | Type       | Description                                                                                                        | Examples                          |
 | ---        | ---                                                                                                                | ---                               |
-| Text       | Just a human readiable text.                                                                                       | `A`, `B`, `C`, etc                |
+| Text       | Just a human readiable text.                                                                                       | `A`, `Price`, `Comment213`, etc                |
 | Number     | Anything that can be parsed as a double by [strtod](https://en.cppreference.com/w/c/string/byte/strtof)                                                                | `1`, `2.0`, `1e-6`, etc           |
-| Expression | Always starts with `=`. Excel style math expression that involves numbers, binary operations, unary operations, and other cells.                         | `=A1+B1`, `=1+2`, `=A1+100` etc |
+| Expression | Always starts with `=`. Excel style math expression that involves numbers, binary operations, unary operations, and other cells.                         | `=A1+B1`, `=((3+2)*2-1)^2`, `=A1%100` etc |
 | Clone      | Always starts with `:`. Clones a neighbor cell in a particular direction denoted by characters `<`, `>`, `v`, `^`. | `:<`, `:>`, `:v`, `:^`             |
 
 

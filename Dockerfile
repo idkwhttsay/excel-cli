@@ -7,7 +7,8 @@ WORKDIR /app
 # Copy all source files and headers
 COPY src/ /app/src/
 COPY nob.c nob.h /app/
-COPY csv/ /app/csv/
+COPY input/ /app/input/
+COPY out/ /app/out/
 
 # Build the application
 # Assuming the main executable should be built from main.c and nob.c
@@ -27,7 +28,8 @@ WORKDIR /app
 
 # Copy only the necessary files from the builder stage
 COPY --from=builder /app/excel-cli /app/excel-cli
-COPY --from=builder /app/csv/ /app/csv/
+COPY --from=builder /app/input/ /app/input/
+COPY --from=builder /app/out/ /app/out/
 
 # Ensure the executable has proper permissions
 RUN chmod +x /app/excel-cli
@@ -36,4 +38,4 @@ RUN chmod +x /app/excel-cli
 RUN ls -la /app/excel-cli
 
 # Set the command to run your application when the container starts
-CMD ["/app/excel-cli", "/app/csv/input.csv"]
+CMD ["/app/excel-cli", "/app/input/bills.csv", "/app/out/out.csv"]

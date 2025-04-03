@@ -36,7 +36,7 @@ Basically a simple Excel engine without any UI.
 
 The project is using [nob](https://github.com/tsoding/nob.h) build system.
 
-```console
+```sh
 $ cc -o nob nob.c
 $ ./nob
 $ ./excel-cli csv/bills.csv out/bills.csv
@@ -44,9 +44,17 @@ $ ./excel-cli csv/bills.csv out/bills.csv
 
 OR
 
-```console
+```sh
 $ cc -o nob nob.c
 $ ./nob run
+```
+
+## Docker
+
+To run the image in docker, run:
+```sh
+$ docker build -t excel-cli .
+$ docker run excel-cli
 ```
 
 ## Syntax
@@ -65,7 +73,7 @@ $ ./nob run
 
 Benchmark test was performed on the table of a size (8600 X 20) full of clone operations. You can find this table in the "input/large.csv".
 
-```console
+```sh
 [INFO] CMD: cc -Wall -Wextra -Wswitch-enum -std=c11 -pedantic -ggdb -o excel-cli src/main.c
 [INFO] CMD: ./excel-cli input/large.csv out/out.csv
 Done in 0.254175 seconds
